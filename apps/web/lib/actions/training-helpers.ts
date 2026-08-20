@@ -1,4 +1,6 @@
 import {
+  createInitialProgress,
+  createLightweightScheduler,
   learnAutoOpponentIfNeeded,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
@@ -51,6 +53,10 @@ export type ProgressRow = {
   mastery: number;
   last_reviewed_at: string | null;
   due_at: string;
+};
+
+export type PracticeProgressRow = ProgressRow & {
+  path_key: string;
 };
 
 export function normalizeTrainingSideMode(value: unknown): SideMode {
@@ -302,16 +308,22 @@ export function createInitialTrainingCheckpoint(
   mode: "practice",
   chapters: ChapterTree[],
   sideMode: SideMode,
+  progressRows?: PracticeProgressRow[],
+  now?: Date,
 ): PracticeState;
 export function createInitialTrainingCheckpoint(
   mode: SessionMode,
   chapters: ChapterTree[],
   sideMode: SideMode,
+  progressRows?: PracticeProgressRow[],
+  now?: Date,
 ): LearnState | PracticeState;
 export function createInitialTrainingCheckpoint(
   mode: SessionMode,
   chapters: ChapterTree[],
   sideMode: SideMode,
+  progressRows: PracticeProgressRow[] = [],
+  now = new Date(),
 ): LearnState | PracticeState {
   const firstChapter = chapters[0];
   if (!firstChapter) {
@@ -333,7 +345,33 @@ export function createInitialTrainingCheckpoint(
     node.children.forEach(collect);
   };
   chapters.forEach((chapter) => collect(chapter.root));
-  return startPractice(cards, sideMode);
+  return startPractice(buildPracticeQueue(cards, progressRows, now), sideMode);
+}
+
+export function buildPracticeQueue(
+  cards: Array<{ pathKey: string; fen: string }>,
+  progressRows: PracticeProgressRow[] = [],
+  now = new Date(),
+): Array<{ pathKey: string; fen: string }> {
+  const progressByPath = new Map(
+    progressRows.map((row) => [
+      row.path_key,
+      progressFromRow(row.path_key, row),
+    ]),
+  );
+  const scheduler = createLightweightScheduler();
+  const nowIso = now.toISOString();
+
+  return cards
+    .map((card) => ({
+      card,
+      progress:
+        progressByPath.get(card.pathKey) ??
+        createInitialProgress(card.pathKey, now),
+    }))
+    .filter(({ progress }) => progress.nextReviewAt <= nowIso)
+    .sort((a, b) => scheduler.compareDue(a.progress, b.progress))
+    .map(({ card }) => card);
 }
 
 export function assertSessionUsable(

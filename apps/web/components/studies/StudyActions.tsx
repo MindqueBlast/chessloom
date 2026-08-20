@@ -24,6 +24,7 @@ import {
   reimportPgnAction,
   renameStudyAction,
 } from "@/lib/actions/studies";
+import { toastCopy } from "@/lib/toasts";
 
 export function StudyActions({
   studyId,
@@ -42,7 +43,7 @@ export function StudyActions({
     startTransition(async () => {
       const result = await renameStudyAction(studyId, title);
       if (result.ok) {
-        toast.success("Study renamed.");
+        toast.success(toastCopy.studyRenamed);
         router.refresh();
       } else {
         toast.error(result.error);
@@ -65,7 +66,7 @@ export function StudyActions({
     startTransition(async () => {
       const result = await reimportPgnAction(studyId, { pgnText });
       if (result.ok) {
-        toast.success("Study reimported. Matching progress was preserved.");
+        toast.success(toastCopy.studyReimported);
         form.reset();
         setReimportOpen(false);
         router.refresh();
@@ -83,7 +84,7 @@ export function StudyActions({
     startTransition(async () => {
       const result = await deleteStudyAction(studyId);
       if (result.ok) {
-        toast.success("Study deleted.");
+        toast.success(toastCopy.studyDeleted);
         router.push("/dashboard");
       } else {
         toast.error(result.error);

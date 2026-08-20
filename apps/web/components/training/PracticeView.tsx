@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 import {
   parsePracticeCheckpoint,
   serializeCheckpoint,
@@ -21,6 +22,7 @@ import {
   submitPracticeMoveAction,
 } from "@/lib/actions/training";
 import { shortcutForKey } from "@/lib/training/ui";
+import { toastCopy } from "@/lib/toasts";
 
 import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
 
@@ -45,6 +47,18 @@ export function PracticeView({
   const currentCard = checkpoint.queue[checkpoint.index];
   const viewedCard = checkpoint.queue[viewedIndex] ?? currentCard;
   const isCurrentPosition = viewedIndex === checkpoint.index;
+  const announcedComplete = useRef(initialCheckpoint.status === "complete");
+
+  useEffect(() => {
+    const complete =
+      checkpoint.status === "complete" ||
+      pendingCheckpoint?.status === "complete";
+    if (!complete || announcedComplete.current) {
+      return;
+    }
+    announcedComplete.current = true;
+    toast.success(toastCopy.reviewCompleted);
+  }, [checkpoint.status, pendingCheckpoint]);
 
   function retry() {
     setFeedback(null);
@@ -82,10 +96,11 @@ export function PracticeView({
           setFeedback({ kind: "incorrect", animate });
         }
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : toastCopy.serverError;
+        toast.error(message);
         setFeedback({ kind: "error", animate });
-        setExpected([
-          error instanceof Error ? error.message : "Please try again.",
-        ]);
+        setExpected([message]);
       }
     });
   }
@@ -101,10 +116,11 @@ export function PracticeView({
         setExpected(result.sans);
         setFeedback({ kind: "incorrect", animate });
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : toastCopy.serverError;
+        toast.error(message);
         setFeedback({ kind: "error", animate });
-        setExpected([
-          error instanceof Error ? error.message : "Please try again.",
-        ]);
+        setExpected([message]);
       }
     });
   }

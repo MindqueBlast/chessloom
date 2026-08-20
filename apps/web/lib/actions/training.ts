@@ -29,6 +29,7 @@ import {
   trainingResultRpcPayload,
   type ChapterRow,
   type NodeRow,
+  type PracticeProgressRow,
   type ProgressRow,
 } from "./training-helpers";
 
@@ -258,8 +259,29 @@ export async function startTrainingSessionAction(
   }
 
   const sideMode = normalizeTrainingSideMode(profile?.default_side_mode);
-  const chapters = await studyChapters(client, studyId);
-  const checkpoint = createInitialTrainingCheckpoint(mode, chapters, sideMode);
+  const [chapters, progressResult] = await Promise.all([
+    studyChapters(client, studyId),
+    mode === "practice"
+      ? client
+          .from("position_progress")
+          .select(
+            "path_key,attempts,correct_count,streak,mastery,last_reviewed_at,due_at",
+          )
+          .eq("study_id", studyId)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (progressResult.error) {
+    throw new Error(progressResult.error.message);
+  }
+  const checkpoint =
+    mode === "practice"
+      ? createInitialTrainingCheckpoint(
+          mode,
+          chapters,
+          sideMode,
+          (progressResult.data ?? []) as PracticeProgressRow[],
+        )
+      : createInitialTrainingCheckpoint(mode, chapters, sideMode);
   const safeCheckpoint = jsonValue(checkpoint);
   const serviceClient = createServiceClient();
   const { data, error } = await serviceClient

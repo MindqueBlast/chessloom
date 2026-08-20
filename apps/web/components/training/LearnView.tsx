@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 import {
   parseLearnCheckpoint,
   serializeCheckpoint,
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { submitLearnMoveAction } from "@/lib/actions/training";
 import { shortcutForKey } from "@/lib/training/ui";
+import { toastCopy } from "@/lib/toasts";
 
 import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
 
@@ -47,6 +49,7 @@ export function LearnView({
   } | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
+  const announcedComplete = useRef(initialCheckpoint.status === "complete");
 
   const chapter = chapters.find(
     (candidate) => candidate.index === checkpoint.chapterIndex,
@@ -94,15 +97,28 @@ export function LearnView({
           });
         }
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : toastCopy.serverError;
+        toast.error(message);
         setFeedback({
           kind: "error",
-          description:
-            error instanceof Error ? error.message : "Please try again.",
+          description: message,
           animate,
         });
       }
     });
   }
+
+  useEffect(() => {
+    const complete =
+      checkpoint.status === "complete" ||
+      pendingCheckpoint?.status === "complete";
+    if (!complete || announcedComplete.current) {
+      return;
+    }
+    announcedComplete.current = true;
+    toast.success(toastCopy.sessionCompleted);
+  }, [checkpoint.status, pendingCheckpoint]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

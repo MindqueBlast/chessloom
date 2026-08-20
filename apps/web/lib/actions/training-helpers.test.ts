@@ -334,6 +334,54 @@ describe("createInitialTrainingCheckpoint", () => {
       revealed: false,
     });
   });
+
+  it("queues only due positions in scheduler order", () => {
+    const now = new Date("2026-08-20T12:00:00.000Z");
+
+    expect(
+      createInitialTrainingCheckpoint("practice", tree, "both", [
+        {
+          path_key: "c0:",
+          attempts: 2,
+          correct_count: 2,
+          streak: 2,
+          mastery: 64,
+          last_reviewed_at: "2026-08-19T12:00:00.000Z",
+          due_at: "2026-08-20T11:00:00.000Z",
+        },
+        {
+          path_key: "c0:e2e4",
+          attempts: 1,
+          correct_count: 0,
+          streak: 0,
+          mastery: 12,
+          last_reviewed_at: "2026-08-20T10:00:00.000Z",
+          due_at: "2026-08-20T10:00:00.000Z",
+        },
+      ], now),
+    ).toMatchObject({
+      queue: [
+        { pathKey: "c0:e2e4" },
+        { pathKey: "c0:" },
+      ],
+    });
+
+    expect(
+      createInitialTrainingCheckpoint("practice", tree, "both", [
+        {
+          path_key: "c0:",
+          attempts: 2,
+          correct_count: 2,
+          streak: 2,
+          mastery: 64,
+          last_reviewed_at: "2026-08-20T12:00:00.000Z",
+          due_at: "2026-08-21T12:00:00.000Z",
+        },
+      ], now),
+    ).toMatchObject({
+      queue: [{ pathKey: "c0:e2e4" }],
+    });
+  });
 });
 
 describe("normalizeTrainingSideMode", () => {

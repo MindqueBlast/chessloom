@@ -49,6 +49,10 @@
 }
 
 :root {
+  --motion-duration-fast: 180ms;
+  --motion-duration-base: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --background: oklch(0.985 0.004 247);
   --foreground: oklch(0.18 0.014 250);
   --card: oklch(1 0 0);
@@ -126,5 +130,16 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -13,6 +13,7 @@ import {
   importPgnFormAction,
   type StudyActionResult,
 } from "@/lib/actions/studies";
+import { toastCopy } from "@/lib/toasts";
 
 const initialState: StudyActionResult | null = null;
 
@@ -29,12 +30,12 @@ export function ImportForm() {
     }
 
     if (state.ok) {
-      toast.success("Study imported.");
+      toast.success(toastCopy.studyImported);
       router.push(`/studies/${state.studyId}`);
       return;
     }
 
-    toast.error(state.error);
+    toast.error(state.error || toastCopy.pgnParseFailed);
   }, [router, state]);
 
   return (
