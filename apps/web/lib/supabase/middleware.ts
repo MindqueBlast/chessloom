@@ -1,6 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const protectedRoutes = ["/dashboard", "/studies", "/training", "/settings"];
+const authRoutes = ["/login", "/signup", "/forgot-password"];
+
+function matchesRoute(pathname: string, routes: string[]) {
+  return routes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -30,7 +39,29 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+  const isAuthenticated = Boolean(data?.claims);
+  const pathname = request.nextUrl.pathname;
+
+  let redirectPath: string | null = null;
+
+  if (!isAuthenticated && matchesRoute(pathname, protectedRoutes)) {
+    redirectPath = "/login";
+  } else if (isAuthenticated && matchesRoute(pathname, authRoutes)) {
+    redirectPath = "/dashboard";
+  }
+
+  if (redirectPath) {
+    const redirectResponse = NextResponse.redirect(
+      new URL(redirectPath, request.url),
+    );
+
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+
+    return redirectResponse;
+  }
 
   return response;
 }
