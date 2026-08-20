@@ -57,7 +57,18 @@ export function learnApplyUserMove(
   chapter: ChapterTree,
   move: { san?: string; uci?: string },
 ): { state: LearnState; feedback: MatchResult } {
-  const feedback = isRepertoireMove(currentNode(state, chapter), move);
+  const node = currentNode(state, chapter);
+  if (
+    state.sideMode !== "both" &&
+    sideToMove(node.fen) !== state.side
+  ) {
+    return {
+      state,
+      feedback: { ok: false, expected: [], reason: "opponent-turn" },
+    };
+  }
+
+  const feedback = isRepertoireMove(node, move);
   return feedback.ok
     ? { state: advance(state, feedback.child), feedback }
     : { state, feedback };

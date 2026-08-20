@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  learnAutoOpponentIfNeeded,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
   serializeCheckpoint,
@@ -48,6 +49,14 @@ describe("training checkpoints", () => {
     expect(parseLearnCheckpoint(serializeCheckpoint(state))).toEqual(state);
   });
 
+  it("restores both mode without enabling opponent auto-play", () => {
+    const state = { ...startLearn(chapter, "both"), side: "black" as const };
+    const restored = parseLearnCheckpoint(serializeCheckpoint(state));
+
+    expect(restored.sideMode).toBe("both");
+    expect(learnAutoOpponentIfNeeded(restored, chapter)).toBe(restored);
+  });
+
   it("round-trips a practice state", () => {
     const state = startPractice(cards, "white");
 
@@ -58,6 +67,14 @@ describe("training checkpoints", () => {
     expect(() => parseLearnCheckpoint("{")).toThrow("Invalid learn checkpoint");
     expect(() =>
       parseLearnCheckpoint('{"chapterIndex":"4","pathKey":"c4:"}'),
+    ).toThrow("Invalid learn checkpoint");
+  });
+
+  it("rejects a learn checkpoint with missing side mode", () => {
+    expect(() =>
+      parseLearnCheckpoint(
+        '{"chapterIndex":4,"pathKey":"c4:","side":"white","stack":[],"status":"active"}',
+      ),
     ).toThrow("Invalid learn checkpoint");
   });
 

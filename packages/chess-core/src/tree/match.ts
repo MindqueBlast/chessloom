@@ -2,7 +2,11 @@ import type { ChapterTree, PathKey, TreeNode } from "../types.js";
 
 export type MatchResult =
   | { ok: true; child: TreeNode }
-  | { ok: false; expected: TreeNode[] };
+  | {
+      ok: false;
+      expected: TreeNode[];
+      reason?: "opponent-turn";
+    };
 
 function normalizeSan(san: string): string {
   return san.trim().replace(/0/g, "O").replace(/[+#?!]+$/, "");

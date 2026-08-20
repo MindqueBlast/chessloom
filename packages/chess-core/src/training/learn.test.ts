@@ -101,6 +101,30 @@ describe("learn training", () => {
     });
   });
 
+  it("rejects a user move on the opponent ply in a white session", () => {
+    const afterE4 = learnApplyUserMove(
+      startLearn(chapter, "white"),
+      chapter,
+      { san: "e4" },
+    ).state;
+    const result = learnApplyUserMove(afterE4, chapter, { san: "e5" });
+
+    expect(result).toEqual({
+      state: afterE4,
+      feedback: { ok: false, expected: [], reason: "opponent-turn" },
+    });
+  });
+
+  it("rejects a user move on the opponent ply in a black session", () => {
+    const state = startLearn(chapter, "black");
+    const result = learnApplyUserMove(state, chapter, { san: "e4" });
+
+    expect(result).toEqual({
+      state,
+      feedback: { ok: false, expected: [], reason: "opponent-turn" },
+    });
+  });
+
   it("never auto-plays in both mode, so the user plays every ply", () => {
     const afterE4 = learnApplyUserMove(
       startLearn(chapter, "both"),

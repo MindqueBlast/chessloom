@@ -52,8 +52,7 @@ export function parseLearnCheckpoint(json: string): LearnState {
     !Array.isArray(value.stack) ||
     !value.stack.every((path) => typeof path === "string") ||
     !isStatus(value.status) ||
-    (value.sideMode !== undefined &&
-      value.sideMode !== "white" &&
+    (value.sideMode !== "white" &&
       value.sideMode !== "black" &&
       value.sideMode !== "both")
   ) {

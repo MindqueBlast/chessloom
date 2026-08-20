@@ -36,3 +36,10 @@ Complete.
 ## Concerns
 
 - Opponent auto-play selects the first repertoire child deterministically; variation choice policy is not specified by the current core interface.
+
+## Review fixes
+
+- Fixed white/black learn sessions to reject user moves on opponent plies without advancing state, returning `reason: "opponent-turn"`; both mode still accepts every ply.
+- Required `sideMode` when parsing learn checkpoints and verified that restored both-mode sessions do not auto-play.
+- Added four regression tests and observed the ownership and missing-`sideMode` tests fail before implementation.
+- `corepack pnpm --filter @chessloom/chess-core test`: 7 test files passed, 44 tests passed.
