@@ -19,6 +19,38 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "The study could not be imported.";
 }
 
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+async function importFailure(
+  error: unknown,
+  uploadedPgn: { client: SupabaseClient; path: string } | null,
+): Promise<StudyActionResult> {
+  const message = errorMessage(error);
+  if (!uploadedPgn) {
+    return { ok: false, error: message };
+  }
+
+  try {
+    const { error: cleanupError } = await uploadedPgn.client.storage
+      .from("pgns")
+      .remove([uploadedPgn.path]);
+
+    if (cleanupError) {
+      return {
+        ok: false,
+        error: `${message} Cleanup of the uploaded PGN also failed: ${cleanupError.message}`,
+      };
+    }
+  } catch (cleanupError) {
+    return {
+      ok: false,
+      error: `${message} Cleanup of the uploaded PGN also failed: ${errorMessage(cleanupError)}`,
+    };
+  }
+
+  return { ok: false, error: message };
+}
+
 async function importPgn(
   input: ImportPgnInput,
 ): Promise<StudyActionResult> {
@@ -26,6 +58,8 @@ async function importPgn(
   if (!pgnText) {
     return { ok: false, error: "Paste a PGN or choose a PGN file." };
   }
+
+  let uploadedPgn: { client: SupabaseClient; path: string } | null = null;
 
   try {
     const parsedStudy = parsePgnToStudy(pgnText);
@@ -51,6 +85,8 @@ async function importPgn(
       if (uploadError) {
         return { ok: false, error: `PGN upload failed: ${uploadError.message}` };
       }
+
+      uploadedPgn = { client: supabase, path: storagePath };
     }
 
     const title = input.title?.trim() || parsedStudy.title;
@@ -66,19 +102,17 @@ async function importPgn(
     );
 
     if (importError || typeof studyId !== "string") {
-      if (storagePath) {
-        await supabase.storage.from("pgns").remove([storagePath]);
-      }
-      return {
-        ok: false,
-        error: importError?.message ?? "The study could not be saved.",
-      };
+      return importFailure(
+        new Error(importError?.message ?? "The study could not be saved."),
+        uploadedPgn,
+      );
     }
 
+    uploadedPgn = null;
     revalidatePath("/dashboard");
     return { ok: true, studyId };
   } catch (error) {
-    return { ok: false, error: errorMessage(error) };
+    return importFailure(error, uploadedPgn);
   }
 }
 
@@ -117,13 +151,19 @@ export async function renameStudyAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: renamedStudy, error } = await supabase
     .from("studies")
     .update({ title: normalizedTitle })
-    .eq("id", studyId);
+    .eq("id", studyId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     return { ok: false, error: error.message };
+  }
+
+  if (!renamedStudy) {
+    return { ok: false, error: "The study could not be renamed." };
   }
 
   revalidatePath("/dashboard");
@@ -145,6 +185,20 @@ export async function deleteStudyAction(
     return { ok: false, error: readError.message };
   }
 
+  if (study.pgn_storage_path) {
+    try {
+      const { error: storageError } = await supabase.storage
+        .from("pgns")
+        .remove([study.pgn_storage_path]);
+
+      if (storageError) {
+        return { ok: false, error: storageError.message };
+      }
+    } catch (error) {
+      return { ok: false, error: errorMessage(error) };
+    }
+  }
+
   const { error: deleteError } = await supabase
     .from("studies")
     .delete()
@@ -152,10 +206,6 @@ export async function deleteStudyAction(
 
   if (deleteError) {
     return { ok: false, error: deleteError.message };
-  }
-
-  if (study.pgn_storage_path) {
-    await supabase.storage.from("pgns").remove([study.pgn_storage_path]);
   }
 
   revalidatePath("/dashboard");
