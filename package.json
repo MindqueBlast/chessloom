@@ -1,0 +1,11 @@
+{
+  "name": "chessloom",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @chessloom/web dev",
+    "build": "pnpm --filter @chessloom/chess-core build && pnpm --filter @chessloom/web build",
+    "test": "pnpm --filter @chessloom/chess-core test",
+    "lint": "pnpm --filter @chessloom/web lint"
+  }
+}
