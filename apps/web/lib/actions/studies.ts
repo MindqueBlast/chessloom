@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { flattenStudyTree, importSource } from "@/lib/studies/import";
+import { toastCopy } from "../toasts";
 
 export type StudyActionResult =
-  | { ok: true; studyId: string }
+  | { ok: true; studyId: string; warning?: string }
   | { ok: false; error: string };
 
 export type ImportPgnInput = {
@@ -269,6 +270,16 @@ export async function renameStudyAction(
   return { ok: true, studyId };
 }
 
+function isMissingStorageObject(error: {
+  message?: string;
+  statusCode?: string | number;
+} | null): boolean {
+  if (!error) return true;
+  const status = String(error.statusCode ?? "");
+  const message = error.message ?? "";
+  return status === "404" || /not found|does not exist/i.test(message);
+}
+
 export async function deleteStudyAction(
   studyId: string,
 ): Promise<StudyActionResult> {
@@ -283,20 +294,7 @@ export async function deleteStudyAction(
     return { ok: false, error: readError.message };
   }
 
-  if (study.pgn_storage_path) {
-    try {
-      const { error: storageError } = await supabase.storage
-        .from("pgns")
-        .remove([study.pgn_storage_path]);
-
-      if (storageError) {
-        return { ok: false, error: storageError.message };
-      }
-    } catch (error) {
-      return { ok: false, error: errorMessage(error) };
-    }
-  }
-
+  const storagePath = study.pgn_storage_path;
   const { error: deleteError } = await supabase
     .from("studies")
     .delete()
@@ -307,5 +305,24 @@ export async function deleteStudyAction(
   }
 
   revalidatePath("/dashboard");
+
+  if (!storagePath) {
+    return { ok: true, studyId };
+  }
+
+  try {
+    const { error: storageError } = await supabase.storage
+      .from("pgns")
+      .remove([storagePath]);
+
+    if (!isMissingStorageObject(storageError)) {
+      console.error("PGN storage cleanup failed:", storageError.message);
+      return { ok: true, studyId, warning: toastCopy.studyDeletedStorageWarning };
+    }
+  } catch (error) {
+    console.error("PGN storage cleanup failed:", error);
+    return { ok: true, studyId, warning: toastCopy.studyDeletedStorageWarning };
+  }
+
   return { ok: true, studyId };
 }

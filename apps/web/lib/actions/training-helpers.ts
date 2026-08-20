@@ -299,10 +299,28 @@ export function buildChapterTrees(
     });
 }
 
+export function resolveLearnChapter(
+  chapters: ChapterTree[],
+  chapterIndex?: number,
+): ChapterTree {
+  if (chapters.length === 0) {
+    throw new Error("This study has no chapters to train");
+  }
+  if (chapterIndex === undefined) {
+    return chapters[0]!;
+  }
+  const chapter = chapters.find((candidate) => candidate.index === chapterIndex);
+  if (!chapter) {
+    throw new Error("That chapter is not in this study");
+  }
+  return chapter;
+}
+
 export function createInitialTrainingCheckpoint(
   mode: "learn",
   chapters: ChapterTree[],
   sideMode: SideMode,
+  chapterIndex?: number,
 ): LearnState;
 export function createInitialTrainingCheckpoint(
   mode: "practice",
@@ -322,19 +340,28 @@ export function createInitialTrainingCheckpoint(
   mode: SessionMode,
   chapters: ChapterTree[],
   sideMode: SideMode,
-  progressRows: PracticeProgressRow[] = [],
+  progressRowsOrChapterIndex: PracticeProgressRow[] | number = [],
   now = new Date(),
 ): LearnState | PracticeState {
-  const firstChapter = chapters[0];
-  if (!firstChapter) {
-    throw new Error("This study has no chapters to train");
-  }
+  const chapterIndex =
+    typeof progressRowsOrChapterIndex === "number"
+      ? progressRowsOrChapterIndex
+      : undefined;
+  const progressRows =
+    typeof progressRowsOrChapterIndex === "number"
+      ? []
+      : progressRowsOrChapterIndex;
 
   if (mode === "learn") {
+    const chapter = resolveLearnChapter(chapters, chapterIndex);
     return learnAutoOpponentIfNeeded(
-      startLearn(firstChapter, sideMode),
-      firstChapter,
+      startLearn(chapter, sideMode),
+      chapter,
     );
+  }
+
+  if (chapters.length === 0) {
+    throw new Error("This study has no chapters to train");
   }
 
   const cards: Array<{ pathKey: string; fen: string }> = [];

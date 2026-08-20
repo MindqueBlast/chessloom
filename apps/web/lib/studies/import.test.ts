@@ -14,19 +14,13 @@ describe("study import preparation", () => {
     const chapters = flattenStudyTree(study);
 
     expect(chapters).toHaveLength(1);
-    expect(chapters[0]?.nodes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path_key: "c0:", parent_path_key: null }),
-        expect.objectContaining({
-          path_key: "c0:e2e4/c7c5/g1f3",
-          parent_path_key: "c0:e2e4/c7c5",
-        }),
-        expect.objectContaining({
-          path_key: "c0:e2e4/c7c5/b1c3",
-          parent_path_key: "c0:e2e4/c7c5",
-        }),
-      ]),
-    );
+    expect(chapters[0]?.nodes.map((node) => node.path_key)).toEqual([
+      "c0:",
+      "c0:e2e4",
+      "c0:e2e4/c7c5",
+      "c0:e2e4/c7c5/g1f3",
+      "c0:e2e4/c7c5/b1c3",
+    ]);
   });
 
   it("stores only PGNs larger than the inline limit", () => {

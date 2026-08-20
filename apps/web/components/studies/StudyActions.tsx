@@ -84,7 +84,11 @@ export function StudyActions({
     startTransition(async () => {
       const result = await deleteStudyAction(studyId);
       if (result.ok) {
-        toast.success(toastCopy.studyDeleted);
+        if (result.warning) {
+          toast.warning(result.warning);
+        } else {
+          toast.success(toastCopy.studyDeleted);
+        }
         router.push("/dashboard");
       } else {
         toast.error(result.error);

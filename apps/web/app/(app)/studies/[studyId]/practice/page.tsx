@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import {
   parsePracticeCheckpoint,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/actions/training";
 import { createClient } from "@/lib/supabase/server";
 import { loadTrainingSession } from "@/lib/training/session";
+import { parseTrainingStartQuery, trainingPath } from "@/lib/training/start";
 
 export const metadata: Metadata = {
   title: "Practice | Chessloom",
@@ -23,10 +24,13 @@ export const metadata: Metadata = {
 
 export default async function PracticePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ studyId: string }>;
+  searchParams: Promise<{ side?: string; fresh?: string }>;
 }) {
   const { studyId } = await params;
+  const start = parseTrainingStartQuery(await searchParams);
   const supabase = await createClient();
   const { data: study } = await supabase
     .from("studies")
@@ -37,9 +41,20 @@ export default async function PracticePage({
   if (!study) notFound();
 
   const { session } = await loadTrainingSession(
-    () => resumeSessionAction(studyId, "practice"),
-    () => startTrainingSessionAction(studyId, "practice"),
+    () =>
+      start.fresh || start.sideMode
+        ? Promise.resolve(null)
+        : resumeSessionAction(studyId, "practice"),
+    () =>
+      startTrainingSessionAction(studyId, "practice", {
+        sideMode: start.sideMode,
+      }),
   );
+
+  if (start.fresh || start.sideMode) {
+    redirect(trainingPath(studyId, "practice"));
+  }
+
   const checkpoint = parsePracticeCheckpoint(
     serializeCheckpoint(session.checkpoint),
   );
@@ -55,6 +70,7 @@ export default async function PracticePage({
           </Link>
         </Button>
         <PracticeView
+          studyId={studyId}
           sessionId={session.sessionId}
           initialCheckpoint={checkpoint}
         />

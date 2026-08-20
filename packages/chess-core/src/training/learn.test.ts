@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { parsePgnToStudy } from "../pgn/parse.js";
 import {
   learnApplyUserMove,
   learnAutoOpponentIfNeeded,
@@ -151,5 +152,24 @@ describe("learn training", () => {
     ).state;
 
     expect(atNf3.status).toBe("complete");
+  });
+
+  it("auto-plays the mainline child, not a side variation listed first in PGN", () => {
+    const chapter = parsePgnToStudy(
+      "1. e4 e5 2. Nf3 (2. Nc3) 2... Nc6 *",
+    ).chapters[0]!;
+    const afterUserE5 = learnApplyUserMove(
+      learnAutoOpponentIfNeeded(startLearn(chapter, "black"), chapter),
+      chapter,
+      { san: "e5" },
+    ).state;
+    const afterOpponent = learnAutoOpponentIfNeeded(afterUserE5, chapter);
+    const e5 = chapter.root.children[0]!.children[0]!;
+    const nf3 = e5.children[0]!;
+    const nc3 = e5.children[1]!;
+
+    expect(nf3.san).toBe("Nf3");
+    expect(nc3.san).toBe("Nc3");
+    expect(afterOpponent.pathKey).toBe(nf3.pathKey);
   });
 });

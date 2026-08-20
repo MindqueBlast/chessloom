@@ -194,10 +194,9 @@ describe("study action failure paths", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("does not delete the database row when Storage deletion fails", async () => {
-    const deleteRow = vi.fn(() => ({
-      eq: vi.fn().mockResolvedValue({ error: null }),
-    }));
+  it("deletes the database row first and warns if storage cleanup fails", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const deleteRow = vi.fn(() => ({ eq }));
     createClient.mockResolvedValue({
       from: vi.fn(() => ({
         select: vi.fn(() => ({
@@ -221,8 +220,42 @@ describe("study action failure paths", () => {
 
     const result = await deleteStudyAction("study-1");
 
-    expect(result).toEqual({ ok: false, error: "storage deletion failed" });
-    expect(deleteRow).not.toHaveBeenCalled();
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      ok: true,
+      studyId: "study-1",
+      warning: "Study deleted. The stored PGN file could not be removed.",
+    });
+    expect(deleteRow).toHaveBeenCalledOnce();
+    expect(eq).toHaveBeenCalledWith("id", "study-1");
+    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("treats a missing stored PGN as successful cleanup after the row is deleted", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    createClient.mockResolvedValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            single: vi.fn().mockResolvedValue({
+              data: { pgn_storage_path: "user-1/gone.pgn" },
+              error: null,
+            }),
+          })),
+        })),
+        delete: vi.fn(() => ({ eq })),
+      })),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn().mockResolvedValue({
+            error: { message: "Object not found", statusCode: "404" },
+          }),
+        })),
+      },
+    });
+
+    await expect(deleteStudyAction("study-1")).resolves.toEqual({
+      ok: true,
+      studyId: "study-1",
+    });
   });
 });

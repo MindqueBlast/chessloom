@@ -93,8 +93,8 @@ export function SettingsForm({
       <Field>
         <FieldLabel>Default side</FieldLabel>
         <FieldDescription>
-          Used when you start Learn or Practice. Random remains a per-session
-          option later.
+          Used when you start Learn or Practice. Random is a per-session
+          option on the study and training screens and is not saved here.
         </FieldDescription>
         <div className="flex flex-wrap gap-2">
           {sideOptions.map((option) => (

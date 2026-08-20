@@ -2,6 +2,8 @@ export const toastCopy = {
   studyImported: "Study imported.",
   pgnParseFailed: "That PGN could not be parsed.",
   studyDeleted: "Study deleted.",
+  studyDeletedStorageWarning:
+    "Study deleted. The stored PGN file could not be removed.",
   studyRenamed: "Study renamed.",
   studyReimported: "Study reimported. Matching progress was preserved.",
   settingsSaved: "Settings saved.",

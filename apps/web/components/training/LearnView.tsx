@@ -9,6 +9,7 @@ import {
   type TreeNode,
 } from "@chessloom/chess-core";
 import { ArrowLeft, ArrowRight, LoaderCircle, RotateCcw } from "lucide-react";
+import Link from "next/link";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { submitLearnMoveAction } from "@/lib/actions/training";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import { shortcutForKey } from "@/lib/training/ui";
+import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
 import { toastCopy } from "@/lib/toasts";
 
 import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
@@ -30,10 +32,12 @@ function findNode(node: TreeNode, pathKey: string): TreeNode | null {
 }
 
 export function LearnView({
+  studyId,
   sessionId,
   chapters,
   initialCheckpoint,
 }: {
+  studyId: string;
   sessionId: string;
   chapters: ChapterTree[];
   initialCheckpoint: LearnState;
@@ -183,6 +187,55 @@ export function LearnView({
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">
             Learn · {chapter.title}
           </h1>
+        </div>
+
+        {chapters.length > 1 ? (
+          <div className="flex flex-wrap gap-2">
+            {chapters.map((candidate) => (
+              <Button
+                key={candidate.index}
+                asChild
+                size="sm"
+                variant={
+                  candidate.index === checkpoint.chapterIndex
+                    ? "default"
+                    : "outline"
+                }
+              >
+                <Link
+                  href={trainingPath(studyId, "learn", {
+                    chapterIndex: candidate.index,
+                    sideMode: checkpoint.sideMode,
+                  })}
+                >
+                  Ch. {candidate.index + 1}
+                </Link>
+              </Button>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          {SESSION_SIDE_MODES.map((option) => (
+            <Button
+              key={option.value}
+              asChild
+              size="sm"
+              variant={
+                option.value === checkpoint.sideMode ? "default" : "outline"
+              }
+            >
+              <Link
+                href={trainingPath(studyId, "learn", {
+                  chapterIndex: checkpoint.chapterIndex,
+                  sideMode: option.value,
+                  fresh: true,
+                })}
+              >
+                {option.label}
+              </Link>
+            </Button>
+          ))}
         </div>
 
         <FeedbackBanner

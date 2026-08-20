@@ -7,6 +7,7 @@ describe("toastCopy", () => {
     expect(toastCopy.studyImported).toBe("Study imported.");
     expect(toastCopy.pgnParseFailed).toMatch(/PGN/i);
     expect(toastCopy.studyDeleted).toBe("Study deleted.");
+    expect(toastCopy.studyDeletedStorageWarning).toMatch(/stored PGN/i);
     expect(toastCopy.settingsSaved).toBe("Settings saved.");
     expect(toastCopy.sessionCompleted).toBe("Session complete.");
     expect(toastCopy.reviewCompleted).toBe("Review complete.");

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { parseLearnCheckpoint, serializeCheckpoint } from "@chessloom/chess-core";
 
@@ -18,6 +18,11 @@ import {
 } from "@/lib/actions/training-helpers";
 import { createClient } from "@/lib/supabase/server";
 import { loadTrainingSession } from "@/lib/training/session";
+import {
+  learnCheckpointMatchesChapter,
+  parseTrainingStartQuery,
+  trainingPath,
+} from "@/lib/training/start";
 
 export const metadata: Metadata = {
   title: "Learn | Chessloom",
@@ -25,10 +30,13 @@ export const metadata: Metadata = {
 
 export default async function LearnPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ studyId: string }>;
+  searchParams: Promise<{ chapter?: string; side?: string; fresh?: string }>;
 }) {
   const { studyId } = await params;
+  const start = parseTrainingStartQuery(await searchParams);
   const supabase = await createClient();
   const [{ data: study }, { data: chapters }, { data: nodes }] =
     await Promise.all([
@@ -52,9 +60,33 @@ export default async function LearnPage({
     (nodes ?? []) as NodeRow[],
   );
   const { session } = await loadTrainingSession(
-    () => resumeSessionAction(studyId, "learn"),
-    () => startTrainingSessionAction(studyId, "learn"),
+    async () => {
+      if (start.fresh) return null;
+      const resumed = await resumeSessionAction(studyId, "learn");
+      if (!resumed) return null;
+      return learnCheckpointMatchesChapter(
+        resumed.checkpoint,
+        start.chapterIndex,
+      )
+        ? resumed
+        : null;
+    },
+    () =>
+      startTrainingSessionAction(studyId, "learn", {
+        chapterIndex: start.chapterIndex,
+        sideMode: start.sideMode,
+      }),
   );
+
+  if (start.fresh) {
+    redirect(
+      trainingPath(studyId, "learn", {
+        chapterIndex: start.chapterIndex,
+        sideMode: start.sideMode,
+      }),
+    );
+  }
+
   const checkpoint = parseLearnCheckpoint(
     serializeCheckpoint(session.checkpoint),
   );
@@ -70,6 +102,7 @@ export default async function LearnPage({
           </Link>
         </Button>
         <LearnView
+          studyId={studyId}
           sessionId={session.sessionId}
           chapters={trees}
           initialCheckpoint={checkpoint}

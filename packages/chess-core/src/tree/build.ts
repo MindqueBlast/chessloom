@@ -52,15 +52,9 @@ function appendLine(
   let currentPath = parentPath;
 
   for (const parsedMove of moves) {
-    for (const variation of parsedMove.variations ?? []) {
-      appendLine(
-        currentParent,
-        variation,
-        new Chess(currentPosition.fen()),
-        chapterIndex,
-        currentPath,
-      );
-    }
+    const siblingParent = currentParent;
+    const siblingPosition = currentPosition.fen();
+    const siblingPath = currentPath;
 
     const move = currentPosition.move(parsedMove.notation.notation);
     if (!move) {
@@ -81,9 +75,20 @@ function appendLine(
       children: [],
     };
 
-    currentParent.children.push(node);
+    // Mainline is sibling_order 0 so Learn auto-play follows the book reply.
+    siblingParent.children.push(node);
     currentParent = node;
     currentPath = path;
+
+    for (const variation of parsedMove.variations ?? []) {
+      appendLine(
+        siblingParent,
+        variation,
+        new Chess(siblingPosition),
+        chapterIndex,
+        siblingPath,
+      );
+    }
   }
 }
 

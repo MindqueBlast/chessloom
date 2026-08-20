@@ -8,6 +8,7 @@ import {
   parseClientCheckpointUpdate,
   progressFromRow,
   progressToRow,
+  resolveLearnChapter,
   trainingResultRpcPayload,
 } from "./training-helpers";
 
@@ -322,6 +323,34 @@ describe("createInitialTrainingCheckpoint", () => {
       side: "black",
       stack: ["c0:"],
     });
+  });
+
+  it("starts Learn on a chosen chapter instead of always chapter 0", () => {
+    const second = {
+      ...tree[0]!,
+      index: 1,
+      title: "Chapter 2",
+      root: {
+        ...tree[0]!.root,
+        id: "root-2",
+        pathKey: "c1:",
+        children: [
+          {
+            ...tree[0]!.root.children[0]!,
+            id: "child-2",
+            pathKey: "c1:e2e4",
+          },
+        ],
+      },
+    };
+    const chapters = [tree[0]!, second];
+
+    expect(resolveLearnChapter(chapters, 1).index).toBe(1);
+    expect(createInitialTrainingCheckpoint("learn", chapters, "white", 1)).toMatchObject({
+      chapterIndex: 1,
+      pathKey: "c1:",
+    });
+    expect(() => resolveLearnChapter(chapters, 9)).toThrow("chapter");
   });
 
   it("queues only trainable positions for practice", () => {

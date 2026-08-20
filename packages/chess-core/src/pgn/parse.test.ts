@@ -17,8 +17,14 @@ describe("parsePgnToStudy", () => {
     const e5 = e4!.children.find((c) => c.san === "e5");
     const afterE5 = e5!;
     const seconds = afterE5.children;
-    const sans = seconds.map((c) => c.san).sort();
-    expect(sans).toEqual(["Nc3", "Nf3"].sort());
+    expect(seconds.map((c) => c.san)).toEqual(["Nf3", "Nc3"]);
+    expect(seconds[0]!.san).toBe("Nf3");
+  });
+
+  it("stores the mainline child first when a variation appears before 2... in PGN", () => {
+    const afterE5 = parsePgnToStudy("1. e4 e5 2. Nf3 (2. Nc3) 2... Nc6 *")
+      .chapters[0]!.root.children[0]!.children[0]!;
+    expect(afterE5.children.map((child) => child.san)).toEqual(["Nf3", "Nc3"]);
   });
 
   it("assigns stable path_keys along mainline", () => {

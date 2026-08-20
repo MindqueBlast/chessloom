@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   parsePracticeCheckpoint,
@@ -21,15 +22,18 @@ import {
   submitPracticeMoveAction,
 } from "@/lib/actions/training";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
+import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
 import { shortcutForKey } from "@/lib/training/ui";
 import { toastCopy } from "@/lib/toasts";
 
 import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
 
 export function PracticeView({
+  studyId,
   sessionId,
   initialCheckpoint,
 }: {
+  studyId: string;
   sessionId: string;
   initialCheckpoint: PracticeState;
 }) {
@@ -172,12 +176,28 @@ export function PracticeView({
 
   if (!currentCard || !viewedCard) {
     return (
-      <FeedbackBanner
-        kind="info"
-        title="Nothing due yet."
-        description="This study has no positions for your selected side."
-        animate={false}
-      />
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {SESSION_SIDE_MODES.map((option) => (
+            <Button key={option.value} asChild size="sm" variant="outline">
+              <Link
+                href={trainingPath(studyId, "practice", {
+                  sideMode: option.value,
+                  fresh: true,
+                })}
+              >
+                {option.label}
+              </Link>
+            </Button>
+          ))}
+        </div>
+        <FeedbackBanner
+          kind="info"
+          title="Nothing due yet."
+          description="This study has no positions for your selected side."
+          animate={false}
+        />
+      </div>
     );
   }
 
@@ -203,6 +223,28 @@ export function PracticeView({
           <p className="mt-2 text-sm text-muted-foreground">
             Find a move from your repertoire.
           </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {SESSION_SIDE_MODES.map((option) => (
+            <Button
+              key={option.value}
+              asChild
+              size="sm"
+              variant={
+                option.value === checkpoint.side ? "default" : "outline"
+              }
+            >
+              <Link
+                href={trainingPath(studyId, "practice", {
+                  sideMode: option.value,
+                  fresh: true,
+                })}
+              >
+                {option.label}
+              </Link>
+            </Button>
+          ))}
         </div>
 
         <FeedbackBanner

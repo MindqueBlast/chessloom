@@ -87,5 +87,9 @@ export function learnAutoOpponentIfNeeded(
     return state;
   }
 
-  return advance(state, node.children[0]!);
+  const mainline = node.children[0];
+  if (!mainline) {
+    return state;
+  }
+  return advance(state, mainline);
 }

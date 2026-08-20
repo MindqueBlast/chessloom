@@ -14,6 +14,7 @@ import {
   type PositionProgress,
   type PracticeState,
   type SessionMode,
+  type SideMode,
 } from "@chessloom/chess-core";
 
 import { createClient } from "@/lib/supabase/server";
@@ -238,9 +239,15 @@ function learnState(checkpoint: unknown): LearnState {
   return parseLearnCheckpoint(serializeCheckpoint(checkpoint));
 }
 
+export type TrainingSessionStartOptions = {
+  chapterIndex?: number;
+  sideMode?: SideMode;
+};
+
 export async function startTrainingSessionAction(
   studyId: string,
   mode: SessionMode,
+  options: TrainingSessionStartOptions = {},
 ): Promise<{ sessionId: string; checkpoint: unknown }> {
   const client = await createClient();
   const user = await currentUser(client);
@@ -260,7 +267,9 @@ export async function startTrainingSessionAction(
     throw new Error("Study was not found");
   }
 
-  const sideMode = normalizeTrainingSideMode(profile?.default_side_mode);
+  const sideMode =
+    options.sideMode ??
+    normalizeTrainingSideMode(profile?.default_side_mode);
   const [chapters, progressResult] = await Promise.all([
     studyChapters(client, studyId),
     mode === "practice"
@@ -276,14 +285,19 @@ export async function startTrainingSessionAction(
     throw new Error(progressResult.error.message);
   }
   const checkpoint =
-    mode === "practice"
+    mode === "learn"
       ? createInitialTrainingCheckpoint(
-          mode,
+          "learn",
+          chapters,
+          sideMode,
+          options.chapterIndex,
+        )
+      : createInitialTrainingCheckpoint(
+          "practice",
           chapters,
           sideMode,
           (progressResult.data ?? []) as PracticeProgressRow[],
-        )
-      : createInitialTrainingCheckpoint(mode, chapters, sideMode);
+        );
   const safeCheckpoint = jsonValue(checkpoint);
   const serviceClient = createServiceClient();
   const { data, error } = await serviceClient
