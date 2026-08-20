@@ -413,6 +413,7 @@ A user can:
 | Architecture | Approach 1 — monolith + `chess-core` package |
 | Source control / deploy | GitHub + Vercel |
 | Motion weighting | Jakub · Emil · selective Jhey |
+| UI primitives | shadcn/ui (Radix) + Sonner toasts; compose product chrome from shadcn, keep board/training surfaces custom |
 
 ---
 
