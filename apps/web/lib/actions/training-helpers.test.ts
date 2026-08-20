@@ -168,12 +168,29 @@ describe("progress row mapping", () => {
 });
 
 describe("trainingResultRpcPayload", () => {
-  it("sends only the result and position identity to the scoring RPC", () => {
-    expect(trainingResultRpcPayload("study-1", "c0:e2e4", true)).toEqual({
+  it("sends only server-derived result and checkpoint fields", () => {
+    const checkpoint = { pathKey: "c0:e2e4", status: "active" };
+    const payload = trainingResultRpcPayload(
+      "user-1",
+      "session-1",
+      "study-1",
+      "c0:e2e4",
+      true,
+      checkpoint,
+      "2026-08-20T12:00:00.000Z",
+    );
+
+    expect(payload).toEqual({
+      p_user_id: "user-1",
+      p_session_id: "session-1",
       p_study_id: "study-1",
       p_path_key: "c0:e2e4",
       p_correct: true,
+      p_checkpoint: checkpoint,
+      p_expected_updated_at: "2026-08-20T12:00:00.000Z",
     });
+    expect(payload).not.toHaveProperty("p_mastery");
+    expect(payload).not.toHaveProperty("p_attempts");
   });
 });
 

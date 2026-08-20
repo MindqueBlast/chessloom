@@ -43,3 +43,31 @@ Complete.
 
 The earlier progress-upsert concurrency concern is resolved by the atomic RPC;
 checkpoint writes now reject stale snapshots via compare-and-swap.
+
+## Critical/important remediation
+- Added `0004_training_service_authority.sql`. It revokes authenticated
+  `training_sessions` INSERT/UPDATE, replaces the owner-all policy with
+  owner-scoped SELECT, removes public/authenticated/anon execution of the old
+  scoring RPC, and grants training RPC execution only to `service_role`.
+- Added the server-only `createServiceClient()` with a fail-closed
+  `SUPABASE_SERVICE_ROLE_KEY` guard and non-persistent auth configuration.
+- Move actions still authenticate and read through the user-scoped client,
+  validate moves with `chess-core`, then use the service client to call
+  `apply_training_result_and_checkpoint`.
+- The new RPC locks and compare-and-swaps the session before committing progress
+  and the checkpoint in one transaction, preventing counted racing attempts.
+- Reveal, client checkpoint, expiry, and resume checkpoint writes now use the
+  service client only after the user and owned session have been verified.
+- Updated the environment example and README to mark the service key as
+  server-only. Added regression tests for the env guard, service-client auth
+  isolation, RPC grants, direct-write revocation, atomic checkpoint SQL, and
+  payloads that cannot include mastery counters.
+
+## Critical/important verification
+- `corepack pnpm exec vitest run` (apps/web) — 26 tests passed.
+- `corepack pnpm exec tsc --noEmit` (apps/web) — passed.
+- `corepack pnpm lint` (apps/web) — passed.
+- `corepack pnpm test` (packages/chess-core) — 44 tests passed.
+- Core and web production builds — passed.
+- The SQL contract is unit-tested but was not executed against a local
+  Supabase/Postgres instance in this environment.

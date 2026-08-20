@@ -17,6 +17,7 @@ import {
 } from "@chessloom/chess-core";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 import {
   assertSessionUsable,
@@ -30,6 +31,7 @@ import {
 } from "./training-helpers";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type ServiceClient = ReturnType<typeof createServiceClient>;
 
 type TrainingSessionRow = {
   id: string;
@@ -63,6 +65,20 @@ async function currentUser(client: SupabaseClient): Promise<{ id: string }> {
   return user;
 }
 
+async function abandonSession(session: TrainingSessionRow): Promise<void> {
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient
+    .from("training_sessions")
+    .update({ status: "abandoned" })
+    .eq("id", session.id)
+    .eq("user_id", session.user_id)
+    .eq("status", "active")
+    .eq("updated_at", session.updated_at);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 async function ownedSession(
   client: SupabaseClient,
   sessionId: string,
@@ -91,11 +107,7 @@ async function ownedSession(
       guardError instanceof Error &&
       guardError.message === "Training session has expired"
     ) {
-      await client
-        .from("training_sessions")
-        .update({ status: "abandoned" })
-        .eq("id", session.id)
-        .eq("user_id", user.id);
+      await abandonSession(session);
     }
     throw guardError;
   }
@@ -147,10 +159,10 @@ function chapterForPath(chapters: ChapterTree[], pathKey: string): ChapterTree {
 }
 
 async function saveSession(
-  client: SupabaseClient,
   session: TrainingSessionRow,
   checkpoint: LearnState | PracticeState,
 ): Promise<unknown> {
+  const client: ServiceClient = createServiceClient();
   const safeCheckpoint = jsonValue(checkpoint);
   const status = checkpoint.status === "complete" ? "completed" : "active";
   const { data, error } = await client
@@ -172,19 +184,29 @@ async function saveSession(
   return safeCheckpoint;
 }
 
-async function scorePosition(
-  client: SupabaseClient,
+async function scorePositionAndSave(
   session: TrainingSessionRow,
   userId: string,
   pathKey: string,
   correct: boolean,
-): Promise<PositionProgress> {
+  checkpoint: LearnState | PracticeState,
+): Promise<{ progress: PositionProgress; checkpoint: unknown }> {
   if (userId !== session.user_id) {
     throw new Error("Training session is not owned by the current user");
   }
-  const { data, error } = await client.rpc(
-    "apply_training_result",
-    trainingResultRpcPayload(session.study_id, pathKey, correct),
+  const safeCheckpoint = jsonValue(checkpoint);
+  const serviceClient = createServiceClient();
+  const { data, error } = await serviceClient.rpc(
+    "apply_training_result_and_checkpoint",
+    trainingResultRpcPayload(
+      userId,
+      session.id,
+      session.study_id,
+      pathKey,
+      correct,
+      safeCheckpoint,
+      session.updated_at,
+    ),
   );
 
   if (error) {
@@ -194,7 +216,10 @@ async function scorePosition(
   if (!row) {
     throw new Error("Training result did not return progress");
   }
-  return progressFromRow(pathKey, row as ProgressRow);
+  return {
+    progress: progressFromRow(pathKey, row as ProgressRow),
+    checkpoint: safeCheckpoint,
+  };
 }
 
 function practiceState(checkpoint: unknown): PracticeState {
@@ -225,20 +250,19 @@ export async function submitPracticeMoveAction(input: {
   const chapters = await studyChapters(client, session.study_id);
   const chapter = chapterForPath(chapters, input.pathKey);
   const result = practiceApplyMove(state, chapter, { uci: input.uci });
-  const progress = await scorePosition(
-    client,
+  const committed = await scorePositionAndSave(
     session,
     userId,
     input.pathKey,
     result.feedback.ok,
+    result.state,
   );
-  const checkpoint = await saveSession(client, session, result.state);
 
   return {
     ok: result.feedback.ok,
     expectedCount: result.feedback.ok ? 0 : result.feedback.expected.length,
-    progress,
-    checkpoint,
+    progress: committed.progress,
+    checkpoint: committed.checkpoint,
   };
 }
 
@@ -257,7 +281,7 @@ export async function revealPracticeExpectedAction(
   const chapters = await studyChapters(client, session.study_id);
   const chapter = chapterForPath(chapters, pathKey);
   const node = findNodeByPathKey(chapter, pathKey)!;
-  await saveSession(client, session, practiceReveal(state));
+  await saveSession(session, practiceReveal(state));
 
   return {
     sans: node.children.flatMap((child) =>
@@ -296,25 +320,27 @@ export async function submitLearnMoveAction(input: {
   const result = learnApplyUserMove(state, chapter, { uci: input.uci });
   const isScoredAttempt =
     result.feedback.ok || result.feedback.reason !== "opponent-turn";
-  const progress = isScoredAttempt
-    ? await scorePosition(
-        client,
+  const nextState = result.feedback.ok
+    ? learnAutoOpponentIfNeeded(result.state, chapter)
+    : result.state;
+  const committed = isScoredAttempt
+    ? await scorePositionAndSave(
         session,
         userId,
         input.pathKey,
         result.feedback.ok,
+        nextState,
       )
-    : undefined;
-  const nextState = result.feedback.ok
-    ? learnAutoOpponentIfNeeded(result.state, chapter)
-    : result.state;
-  const checkpoint = await saveSession(client, session, nextState);
+    : {
+        progress: undefined,
+        checkpoint: await saveSession(session, nextState),
+      };
 
   return {
     ok: result.feedback.ok,
     expectedCount: result.feedback.ok ? 0 : result.feedback.expected.length,
-    progress,
-    checkpoint,
+    progress: committed.progress,
+    checkpoint: committed.checkpoint,
   };
 }
 
@@ -358,7 +384,7 @@ export async function saveCheckpointAction(
     ) {
       throw new Error("Learn checkpoint contains an unknown position");
     }
-    await saveSession(client, session, state);
+    await saveSession(session, state);
     return;
   }
 
@@ -374,7 +400,7 @@ export async function saveCheckpointAction(
   if (!validQueue) {
     throw new Error("Practice checkpoint contains an unknown position");
   }
-  await saveSession(client, session, state);
+  await saveSession(session, state);
 }
 
 export async function resumeSessionAction(
@@ -409,11 +435,7 @@ export async function resumeSessionAction(
       guardError instanceof Error &&
       guardError.message === "Training session has expired"
     ) {
-      await client
-        .from("training_sessions")
-        .update({ status: "abandoned" })
-        .eq("id", session.id)
-        .eq("user_id", user.id);
+      await abandonSession(session);
       return null;
     }
     throw guardError;

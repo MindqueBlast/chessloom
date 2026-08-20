@@ -164,21 +164,33 @@ export function parseClientCheckpointUpdate(
 }
 
 export function trainingResultRpcPayload(
+  userId: string,
+  sessionId: string,
   studyId: string,
   pathKey: string,
   correct: boolean,
+  checkpoint: unknown,
+  expectedUpdatedAt: string,
 ): {
+  p_user_id: string;
+  p_session_id: string;
   p_study_id: string;
   p_path_key: string;
   p_correct: boolean;
+  p_checkpoint: unknown;
+  p_expected_updated_at: string;
 } {
   if (!pathKey.trim()) {
     throw new Error("Training result path cannot be empty");
   }
   return {
+    p_user_id: userId,
+    p_session_id: sessionId,
     p_study_id: studyId,
     p_path_key: pathKey,
     p_correct: correct,
+    p_checkpoint: checkpoint,
+    p_expected_updated_at: expectedUpdatedAt,
   };
 }
 
