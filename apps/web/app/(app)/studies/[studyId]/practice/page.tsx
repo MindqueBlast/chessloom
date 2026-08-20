@@ -10,8 +10,12 @@ import {
 import { AppHeader } from "@/components/app/AppHeader";
 import { PracticeView } from "@/components/training/PracticeView";
 import { Button } from "@/components/ui/button";
-import { startTrainingSessionAction } from "@/lib/actions/training";
+import {
+  resumeSessionAction,
+  startTrainingSessionAction,
+} from "@/lib/actions/training";
 import { createClient } from "@/lib/supabase/server";
+import { loadTrainingSession } from "@/lib/training/session";
 
 export const metadata: Metadata = {
   title: "Practice | Chessloom",
@@ -32,7 +36,10 @@ export default async function PracticePage({
 
   if (!study) notFound();
 
-  const session = await startTrainingSessionAction(studyId, "practice");
+  const { session } = await loadTrainingSession(
+    () => resumeSessionAction(studyId, "practice"),
+    () => startTrainingSessionAction(studyId, "practice"),
+  );
   const checkpoint = parsePracticeCheckpoint(
     serializeCheckpoint(session.checkpoint),
   );

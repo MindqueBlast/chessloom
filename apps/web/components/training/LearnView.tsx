@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   parseLearnCheckpoint,
-  serializeCheckpoint,
   type ChapterTree,
   type LearnState,
   type TreeNode,
@@ -15,6 +14,7 @@ import { ChessBoard } from "@/components/chess/ChessBoard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { submitLearnMoveAction } from "@/lib/actions/training";
+import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import { shortcutForKey } from "@/lib/training/ui";
 import { toastCopy } from "@/lib/toasts";
 
@@ -86,7 +86,10 @@ export function LearnView({
         });
         if (result.ok) {
           setPendingCheckpoint(
-            parseLearnCheckpoint(serializeCheckpoint(result.checkpoint)),
+            applyResolvedMoveCheckpoint(
+              result.checkpoint,
+              parseLearnCheckpoint,
+            ),
           );
           setFeedback({ kind: "correct", animate });
         } else {

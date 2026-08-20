@@ -8,6 +8,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient }));
 
 import {
+  resumeSessionAction,
   revealPracticeExpectedAction,
   saveCheckpointAction,
   submitPracticeMoveAction,
@@ -19,6 +20,7 @@ function query(result: () => { data: unknown; error: unknown }) {
   const builder = {
     eq: vi.fn(() => builder),
     order: vi.fn(() => builder),
+    limit: vi.fn(() => builder),
     select: vi.fn(() => builder),
     maybeSingle: vi.fn(async () => result()),
     then(
@@ -50,6 +52,7 @@ function clientFixture() {
   };
   let savedCheckpoint: unknown = checkpoint;
   let rpcPayload: Row | null = null;
+  let abandoned = false;
 
   const userClient = {
     auth: {
@@ -147,6 +150,7 @@ function clientFixture() {
       }
       return {
         update: vi.fn((values: Row) => {
+          if (values.status === "abandoned") abandoned = true;
           if ("checkpoint" in values) savedCheckpoint = values.checkpoint;
           return query(() => ({ data: { id: "session-1" }, error: null }));
         }),
@@ -159,6 +163,8 @@ function clientFixture() {
     serviceClient,
     getSavedCheckpoint: () => savedCheckpoint,
     getRpcPayload: () => rpcPayload,
+    wasAbandoned: () => abandoned,
+    session,
   };
 }
 
@@ -241,5 +247,51 @@ describe("authoritative practice actions", () => {
         status: "complete",
       }),
     ).rejects.toThrow("complete");
+  });
+
+  it("resumes an active practice checkpoint newer than 14 days", async () => {
+    const fixture = clientFixture();
+    createClient.mockResolvedValue(fixture.userClient);
+    createServiceClient.mockReturnValue(fixture.serviceClient);
+
+    await expect(
+      resumeSessionAction("study-1", "practice"),
+    ).resolves.toEqual({
+      sessionId: "session-1",
+      checkpoint: {
+        queue: [{ pathKey: "c0:", fen: "root-fen" }],
+        index: 0,
+        revealed: false,
+        side: "white",
+        status: "active",
+      },
+    });
+    expect(fixture.wasAbandoned()).toBe(false);
+  });
+
+  it("abandons expired checkpoints so a later start can be fresh", async () => {
+    const fixture = clientFixture();
+    fixture.session.updated_at = "2026-08-01T12:00:00.000Z";
+    createClient.mockResolvedValue(fixture.userClient);
+    createServiceClient.mockReturnValue(fixture.serviceClient);
+
+    await expect(resumeSessionAction("study-1", "practice")).resolves.toBeNull();
+    expect(fixture.wasAbandoned()).toBe(true);
+  });
+
+  it("abandons unrestorable checkpoints whose positions no longer match", async () => {
+    const fixture = clientFixture();
+    fixture.session.checkpoint = {
+      queue: [{ pathKey: "c0:", fen: "stale-fen" }],
+      index: 0,
+      revealed: false,
+      side: "white",
+      status: "active",
+    };
+    createClient.mockResolvedValue(fixture.userClient);
+    createServiceClient.mockReturnValue(fixture.serviceClient);
+
+    await expect(resumeSessionAction("study-1", "practice")).resolves.toBeNull();
+    expect(fixture.wasAbandoned()).toBe(true);
   });
 });

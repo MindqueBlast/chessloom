@@ -7,13 +7,17 @@ import { parseLearnCheckpoint, serializeCheckpoint } from "@chessloom/chess-core
 import { AppHeader } from "@/components/app/AppHeader";
 import { LearnView } from "@/components/training/LearnView";
 import { Button } from "@/components/ui/button";
-import { startTrainingSessionAction } from "@/lib/actions/training";
+import {
+  resumeSessionAction,
+  startTrainingSessionAction,
+} from "@/lib/actions/training";
 import {
   buildChapterTrees,
   type ChapterRow,
   type NodeRow,
 } from "@/lib/actions/training-helpers";
 import { createClient } from "@/lib/supabase/server";
+import { loadTrainingSession } from "@/lib/training/session";
 
 export const metadata: Metadata = {
   title: "Learn | Chessloom",
@@ -47,7 +51,10 @@ export default async function LearnPage({
     (chapters ?? []) as ChapterRow[],
     (nodes ?? []) as NodeRow[],
   );
-  const session = await startTrainingSessionAction(studyId, "learn");
+  const { session } = await loadTrainingSession(
+    () => resumeSessionAction(studyId, "learn"),
+    () => startTrainingSessionAction(studyId, "learn"),
+  );
   const checkpoint = parseLearnCheckpoint(
     serializeCheckpoint(session.checkpoint),
   );

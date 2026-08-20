@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   parsePracticeCheckpoint,
-  serializeCheckpoint,
   type PracticeState,
 } from "@chessloom/chess-core";
 import {
@@ -21,6 +20,7 @@ import {
   revealPracticeExpectedAction,
   submitPracticeMoveAction,
 } from "@/lib/actions/training";
+import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import { shortcutForKey } from "@/lib/training/ui";
 import { toastCopy } from "@/lib/toasts";
 
@@ -89,7 +89,10 @@ export function PracticeView({
         });
         if (result.ok) {
           setPendingCheckpoint(
-            parsePracticeCheckpoint(serializeCheckpoint(result.checkpoint)),
+            applyResolvedMoveCheckpoint(
+              result.checkpoint,
+              parsePracticeCheckpoint,
+            ),
           );
           setFeedback({ kind: "correct", animate });
         } else {

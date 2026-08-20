@@ -20,6 +20,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 import {
+  resumableLearnCheckpoint,
+  resumablePracticeCheckpoint,
+} from "../training/session";
+
+import {
   assertSessionUsable,
   buildChapterTrees,
   createInitialTrainingCheckpoint,
@@ -237,9 +242,6 @@ export async function startTrainingSessionAction(
   studyId: string,
   mode: SessionMode,
 ): Promise<{ sessionId: string; checkpoint: unknown }> {
-  const resumed = await resumeSessionAction(studyId, mode);
-  if (resumed) return resumed;
-
   const client = await createClient();
   const user = await currentUser(client);
   const [{ data: study, error: studyError }, { data: profile }] =
@@ -513,9 +515,15 @@ export async function resumeSessionAction(
     throw guardError;
   }
 
+  const chapters = await studyChapters(client, session.study_id);
   const checkpoint =
     mode === "learn"
-      ? jsonValue(learnState(session.checkpoint))
-      : jsonValue(practiceState(session.checkpoint));
-  return { sessionId: session.id, checkpoint };
+      ? resumableLearnCheckpoint(session.checkpoint, chapters)
+      : resumablePracticeCheckpoint(session.checkpoint, chapters);
+  if (!checkpoint) {
+    await abandonSession(session);
+    return null;
+  }
+
+  return { sessionId: session.id, checkpoint: jsonValue(checkpoint) };
 }
