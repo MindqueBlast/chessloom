@@ -1,0 +1,264 @@
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  parseLearnCheckpoint,
+  serializeCheckpoint,
+  type ChapterTree,
+  type LearnState,
+  type TreeNode,
+} from "@chessloom/chess-core";
+import { ArrowLeft, ArrowRight, LoaderCircle, RotateCcw } from "lucide-react";
+
+import { ChessBoard } from "@/components/chess/ChessBoard";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { submitLearnMoveAction } from "@/lib/actions/training";
+import { shortcutForKey } from "@/lib/training/ui";
+
+import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
+
+function findNode(node: TreeNode, pathKey: string): TreeNode | null {
+  if (node.pathKey === pathKey) return node;
+  for (const child of node.children) {
+    const found = findNode(child, pathKey);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function LearnView({
+  sessionId,
+  chapters,
+  initialCheckpoint,
+}: {
+  sessionId: string;
+  chapters: ChapterTree[];
+  initialCheckpoint: LearnState;
+}) {
+  const [checkpoint, setCheckpoint] = useState(initialCheckpoint);
+  const [pendingCheckpoint, setPendingCheckpoint] = useState<LearnState | null>(
+    null,
+  );
+  const [feedback, setFeedback] = useState<{
+    kind: FeedbackKind;
+    description?: string;
+    animate: boolean;
+  } | null>(null);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const chapter = chapters.find(
+    (candidate) => candidate.index === checkpoint.chapterIndex,
+  );
+  const history = [...checkpoint.stack, checkpoint.pathKey];
+  const viewedIndex = historyIndex ?? history.length - 1;
+  const viewedPath = history[viewedIndex] ?? checkpoint.pathKey;
+  const node = chapter ? findNode(chapter.root, viewedPath) : null;
+  const isCurrentPosition = viewedPath === checkpoint.pathKey;
+
+  function retry() {
+    setFeedback(null);
+    setPendingCheckpoint(null);
+  }
+
+  function continueTraining() {
+    if (pendingCheckpoint) {
+      setCheckpoint(pendingCheckpoint);
+      setPendingCheckpoint(null);
+      setHistoryIndex(null);
+    }
+    setFeedback(null);
+  }
+
+  function submitMove(uci: string, animate = true) {
+    if (pending || pendingCheckpoint || !isCurrentPosition) return;
+    setFeedback(null);
+    startTransition(async () => {
+      try {
+        const result = await submitLearnMoveAction({
+          sessionId,
+          pathKey: checkpoint.pathKey,
+          uci,
+        });
+        if (result.ok) {
+          setPendingCheckpoint(
+            parseLearnCheckpoint(serializeCheckpoint(result.checkpoint)),
+          );
+          setFeedback({ kind: "correct", animate });
+        } else {
+          setFeedback({
+            kind: "incorrect",
+            description: "Try another branch from this position.",
+            animate,
+          });
+        }
+      } catch (error) {
+        setFeedback({
+          kind: "error",
+          description:
+            error instanceof Error ? error.message : "Please try again.",
+          animate,
+        });
+      }
+    });
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const shortcut = shortcutForKey(event.key, event.repeat);
+      if (!shortcut) return;
+      event.preventDefault();
+      if (shortcut === "back") {
+        setHistoryIndex((current) =>
+          Math.max(0, (current ?? history.length - 1) - 1),
+        );
+      } else if (shortcut === "forward") {
+        setHistoryIndex((current) =>
+          Math.min(history.length - 1, (current ?? history.length - 1) + 1),
+        );
+      } else if (shortcut === "retry") {
+        retry();
+      } else if (feedback) {
+        continueTraining();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  const progressLabel = useMemo(() => {
+    const moveNumber = Math.floor((node?.ply ?? 0) / 2) + 1;
+    return `Chapter ${checkpoint.chapterIndex + 1} · move ${moveNumber}`;
+  }, [checkpoint.chapterIndex, node?.ply]);
+
+  if (!chapter || !node) {
+    return (
+      <FeedbackBanner
+        kind="error"
+        description="The saved training position is no longer in this study."
+        animate={false}
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+      <ChessBoard
+        fen={node.fen}
+        orientation={checkpoint.side}
+        disabled={
+          pending ||
+          Boolean(pendingCheckpoint) ||
+          !isCurrentPosition ||
+          checkpoint.status === "complete"
+        }
+        onMove={submitMove}
+      />
+
+      <div className="space-y-4">
+        <div>
+          <p className="font-mono text-xs tracking-[0.14em] text-muted-foreground uppercase">
+            {progressLabel}
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+            Learn · {chapter.title}
+          </h1>
+        </div>
+
+        <FeedbackBanner
+          kind={feedback?.kind ?? null}
+          description={feedback?.description}
+          animate={feedback?.animate}
+        />
+
+        {checkpoint.status === "complete" && !pendingCheckpoint ? (
+          <FeedbackBanner
+            kind="info"
+            title="Chapter complete."
+            description="You reached the end of this line."
+          />
+        ) : null}
+
+        {node.comment ? (
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Position note</CardTitle>
+            </CardHeader>
+            <CardContent className="leading-6 text-muted-foreground">
+              {node.comment}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {isCurrentPosition && node.children.length > 1 && !pendingCheckpoint ? (
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Choose a branch</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              {node.children.map((child) =>
+                child.uci && child.san ? (
+                  <Button
+                    key={child.pathKey}
+                    type="button"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => submitMove(child.uci!)}
+                  >
+                    {child.san}
+                  </Button>
+                ) : null,
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          {pending ? (
+            <Button type="button" disabled>
+              <LoaderCircle className="animate-spin" />
+              Checking…
+            </Button>
+          ) : pendingCheckpoint ? (
+            <Button type="button" onClick={continueTraining}>
+              Continue
+              <ArrowRight />
+            </Button>
+          ) : feedback ? (
+            <Button type="button" variant="outline" onClick={retry}>
+              <RotateCcw />
+              Retry
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Previous position"
+            disabled={viewedIndex === 0}
+            onClick={() => setHistoryIndex(Math.max(0, viewedIndex - 1))}
+          >
+            <ArrowLeft />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Next position"
+            disabled={viewedIndex >= history.length - 1}
+            onClick={() =>
+              setHistoryIndex(Math.min(history.length - 1, viewedIndex + 1))
+            }
+          >
+            <ArrowRight />
+          </Button>
+        </div>
+
+        <p className="text-xs leading-5 text-muted-foreground">
+          ←/→ review · R retry · Space/Enter continue
+        </p>
+      </div>
+    </div>
+  );
+}

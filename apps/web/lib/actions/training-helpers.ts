@@ -1,11 +1,15 @@
 import {
+  learnAutoOpponentIfNeeded,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
   serializeCheckpoint,
+  startLearn,
+  startPractice,
   type LearnState,
   type PracticeState,
   type ChapterTree,
   type PositionProgress,
+  type SideMode,
   type SessionMode,
   type TreeNode,
 } from "@chessloom/chess-core";
@@ -48,6 +52,15 @@ export type ProgressRow = {
   last_reviewed_at: string | null;
   due_at: string;
 };
+
+export function normalizeTrainingSideMode(value: unknown): SideMode {
+  return value === "white" ||
+    value === "black" ||
+    value === "both" ||
+    value === "random"
+    ? value
+    : "both";
+}
 
 function hasExactKeys(value: unknown, keys: readonly string[]): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -278,6 +291,49 @@ export function buildChapterTrees(
         root: roots[0]!,
       };
     });
+}
+
+export function createInitialTrainingCheckpoint(
+  mode: "learn",
+  chapters: ChapterTree[],
+  sideMode: SideMode,
+): LearnState;
+export function createInitialTrainingCheckpoint(
+  mode: "practice",
+  chapters: ChapterTree[],
+  sideMode: SideMode,
+): PracticeState;
+export function createInitialTrainingCheckpoint(
+  mode: SessionMode,
+  chapters: ChapterTree[],
+  sideMode: SideMode,
+): LearnState | PracticeState;
+export function createInitialTrainingCheckpoint(
+  mode: SessionMode,
+  chapters: ChapterTree[],
+  sideMode: SideMode,
+): LearnState | PracticeState {
+  const firstChapter = chapters[0];
+  if (!firstChapter) {
+    throw new Error("This study has no chapters to train");
+  }
+
+  if (mode === "learn") {
+    return learnAutoOpponentIfNeeded(
+      startLearn(firstChapter, sideMode),
+      firstChapter,
+    );
+  }
+
+  const cards: Array<{ pathKey: string; fen: string }> = [];
+  const collect = (node: TreeNode) => {
+    if (node.children.length > 0) {
+      cards.push({ pathKey: node.pathKey, fen: node.fen });
+    }
+    node.children.forEach(collect);
+  };
+  chapters.forEach((chapter) => collect(chapter.root));
+  return startPractice(cards, sideMode);
 }
 
 export function assertSessionUsable(

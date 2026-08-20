@@ -22,6 +22,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   assertSessionUsable,
   buildChapterTrees,
+  createInitialTrainingCheckpoint,
+  normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
   progressFromRow,
   trainingResultRpcPayload,
@@ -228,6 +230,54 @@ function practiceState(checkpoint: unknown): PracticeState {
 
 function learnState(checkpoint: unknown): LearnState {
   return parseLearnCheckpoint(serializeCheckpoint(checkpoint));
+}
+
+export async function startTrainingSessionAction(
+  studyId: string,
+  mode: SessionMode,
+): Promise<{ sessionId: string; checkpoint: unknown }> {
+  const resumed = await resumeSessionAction(studyId, mode);
+  if (resumed) return resumed;
+
+  const client = await createClient();
+  const user = await currentUser(client);
+  const [{ data: study, error: studyError }, { data: profile }] =
+    await Promise.all([
+      client.from("studies").select("id").eq("id", studyId).maybeSingle(),
+      client
+        .from("profiles")
+        .select("default_side_mode")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]);
+  if (studyError) {
+    throw new Error(studyError.message);
+  }
+  if (!study) {
+    throw new Error("Study was not found");
+  }
+
+  const sideMode = normalizeTrainingSideMode(profile?.default_side_mode);
+  const chapters = await studyChapters(client, studyId);
+  const checkpoint = createInitialTrainingCheckpoint(mode, chapters, sideMode);
+  const safeCheckpoint = jsonValue(checkpoint);
+  const serviceClient = createServiceClient();
+  const { data, error } = await serviceClient
+    .from("training_sessions")
+    .insert({
+      user_id: user.id,
+      study_id: studyId,
+      mode,
+      checkpoint: safeCheckpoint,
+      status: checkpoint.status === "complete" ? "completed" : "active",
+    })
+    .select("id")
+    .single();
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { sessionId: data.id as string, checkpoint: safeCheckpoint };
 }
 
 export async function submitPracticeMoveAction(input: {

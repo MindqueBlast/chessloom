@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   assertSessionUsable,
   buildChapterTrees,
+  createInitialTrainingCheckpoint,
+  normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
   progressFromRow,
   progressToRow,
@@ -258,5 +260,88 @@ describe("parseClientCheckpointUpdate", () => {
         stack: ["c0:"],
       }, current),
     ).toThrow("current server checkpoint");
+  });
+});
+
+describe("createInitialTrainingCheckpoint", () => {
+  const tree = buildChapterTrees(
+    [
+      {
+        id: "chapter-1",
+        chapter_index: 0,
+        name: "Main line",
+        initial_fen:
+          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        headers: {},
+      },
+    ],
+    [
+      {
+        id: "root",
+        chapter_id: "chapter-1",
+        parent_id: null,
+        path_key: "c0:",
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        san: null,
+        uci: null,
+        ply: 0,
+        comment: null,
+        nags: [],
+      },
+      {
+        id: "child",
+        chapter_id: "chapter-1",
+        parent_id: "root",
+        path_key: "c0:e2e4",
+        fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        san: "e4",
+        uci: "e2e4",
+        ply: 1,
+        comment: null,
+        nags: [],
+      },
+      {
+        id: "reply",
+        chapter_id: "chapter-1",
+        parent_id: "child",
+        path_key: "c0:e2e4.e7e5",
+        fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        san: "e5",
+        uci: "e7e5",
+        ply: 2,
+        comment: null,
+        nags: [],
+      },
+    ],
+  );
+
+  it("advances the opening move when learning as black", () => {
+    expect(createInitialTrainingCheckpoint("learn", tree, "black")).toMatchObject({
+      chapterIndex: 0,
+      pathKey: "c0:e2e4",
+      side: "black",
+      stack: ["c0:"],
+    });
+  });
+
+  it("queues only trainable positions for practice", () => {
+    expect(createInitialTrainingCheckpoint("practice", tree, "both")).toMatchObject({
+      queue: [
+        { pathKey: "c0:" },
+        { pathKey: "c0:e2e4" },
+      ],
+      index: 0,
+      revealed: false,
+    });
+  });
+});
+
+describe("normalizeTrainingSideMode", () => {
+  it("preserves every supported preference and defaults unknown values", () => {
+    expect(normalizeTrainingSideMode("white")).toBe("white");
+    expect(normalizeTrainingSideMode("black")).toBe("black");
+    expect(normalizeTrainingSideMode("both")).toBe("both");
+    expect(normalizeTrainingSideMode("random")).toBe("random");
+    expect(normalizeTrainingSideMode(null)).toBe("both");
   });
 });

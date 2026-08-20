@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, GitBranch } from "lucide-react";
+import { ArrowLeft, BookOpen, GitBranch, Target } from "lucide-react";
 
 import { AppHeader } from "@/components/app/AppHeader";
 import { StudyActions } from "@/components/studies/StudyActions";
@@ -81,6 +81,20 @@ export default async function StudyPage({
               {chapters?.length ?? 0} chapters ·{" "}
               {Math.max(0, (nodes?.length ?? 0) - (chapters?.length ?? 0))} moves
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href={`/studies/${studyId}/learn`}>
+                <BookOpen />
+                Learn
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/studies/${studyId}/practice`}>
+                <Target />
+                Practice
+              </Link>
+            </Button>
           </div>
         </div>
 
