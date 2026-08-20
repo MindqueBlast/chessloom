@@ -16,6 +16,9 @@ export function AppHeader() {
         </Link>
         <nav className="flex items-center gap-2" aria-label="Account">
           <Button asChild variant="ghost">
+            <Link href="/import">Import PGN</Link>
+          </Button>
+          <Button asChild variant="ghost">
             <Link href="/settings">Settings</Link>
           </Button>
           <form action={signOut}>
