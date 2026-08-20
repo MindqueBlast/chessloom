@@ -88,7 +88,8 @@ export default async function StudyPage({
           <CardHeader>
             <CardTitle>Manage study</CardTitle>
             <CardDescription>
-              Rename this study or permanently remove its complete tree.
+              Rename, replace the PGN while preserving matching progress, or
+              permanently remove the study.
             </CardDescription>
           </CardHeader>
           <CardContent>

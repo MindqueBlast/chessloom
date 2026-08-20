@@ -20,6 +20,7 @@ vi.mock("@/lib/studies/import", () => ({
 import {
   deleteStudyAction,
   importPgnAction,
+  reimportPgnAction,
   renameStudyAction,
 } from "./studies";
 
@@ -86,6 +87,90 @@ describe("study action failure paths", () => {
       error:
         "database rejected import Cleanup of the uploaded PGN also failed: storage unavailable",
     });
+  });
+
+  it("reimports through one RPC and removes the superseded stored PGN", async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const remove = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: "study-1", error: null });
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { pgn_storage_path: "user-1/old.pgn" },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+      storage: {
+        from: vi.fn(() => ({ upload, remove })),
+      },
+      rpc,
+    });
+
+    const result = await reimportPgnAction("study-1", {
+      pgnText: largePgn(),
+    });
+
+    expect(result).toEqual({ ok: true, studyId: "study-1" });
+    expect(rpc).toHaveBeenCalledWith(
+      "reimport_study",
+      expect.objectContaining({
+        p_study_id: "study-1",
+        p_source_type: "pgn_upload",
+        p_pgn_text: null,
+        p_chapters: [],
+      }),
+    );
+    expect(remove).toHaveBeenCalledWith(["user-1/old.pgn"]);
+    expect(revalidatePath).toHaveBeenCalledWith("/studies/study-1");
+  });
+
+  it("cleans up the replacement upload when reimport fails", async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const remove = vi.fn().mockResolvedValue({ error: null });
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { pgn_storage_path: "user-1/old.pgn" },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+      storage: {
+        from: vi.fn(() => ({ upload, remove })),
+      },
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: "replacement rejected" },
+      }),
+    });
+
+    const result = await reimportPgnAction("study-1", {
+      pgnText: largePgn(),
+    });
+
+    expect(result).toEqual({ ok: false, error: "replacement rejected" });
+    expect(remove).toHaveBeenCalledOnce();
+    expect(remove).not.toHaveBeenCalledWith(["user-1/old.pgn"]);
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("fails rename when no study row was updated", async () => {

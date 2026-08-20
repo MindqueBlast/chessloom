@@ -141,6 +141,104 @@ export async function importPgnFormAction(
   });
 }
 
+export async function reimportPgnAction(
+  studyId: string,
+  input: ImportPgnInput,
+): Promise<StudyActionResult> {
+  const pgnText = input.pgnText?.trim();
+  if (!pgnText) {
+    return { ok: false, error: "Paste a PGN or choose a PGN file." };
+  }
+
+  let uploadedPgn: { client: SupabaseClient; path: string } | null = null;
+
+  try {
+    const parsedStudy = parsePgnToStudy(pgnText);
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { ok: false, error: "Sign in before reimporting a study." };
+    }
+
+    const { data: study, error: studyError } = await supabase
+      .from("studies")
+      .select("pgn_storage_path")
+      .eq("id", studyId)
+      .maybeSingle();
+
+    if (studyError) {
+      return { ok: false, error: studyError.message };
+    }
+
+    if (!study) {
+      return { ok: false, error: "The study could not be reimported." };
+    }
+
+    const { sourceType, useStorage } = importSource(pgnText.length);
+    let storagePath: string | null = null;
+
+    if (useStorage) {
+      storagePath = `${user.id}/${crypto.randomUUID()}.pgn`;
+      const { error: uploadError } = await supabase.storage
+        .from("pgns")
+        .upload(storagePath, new Blob([pgnText], { type: "application/x-chess-pgn" }));
+
+      if (uploadError) {
+        return { ok: false, error: `PGN upload failed: ${uploadError.message}` };
+      }
+
+      uploadedPgn = { client: supabase, path: storagePath };
+    }
+
+    const { data: reimportedStudyId, error: reimportError } =
+      await supabase.rpc("reimport_study", {
+        p_study_id: studyId,
+        p_source_type: sourceType,
+        p_pgn_text: useStorage ? null : pgnText,
+        p_storage_path: storagePath,
+        p_chapters: flattenStudyTree(parsedStudy),
+      });
+
+    if (reimportError || reimportedStudyId !== studyId) {
+      return importFailure(
+        new Error(reimportError?.message ?? "The study could not be reimported."),
+        uploadedPgn,
+      );
+    }
+
+    uploadedPgn = null;
+
+    if (
+      study.pgn_storage_path &&
+      study.pgn_storage_path !== storagePath
+    ) {
+      try {
+        const { error: cleanupError } = await supabase.storage
+          .from("pgns")
+          .remove([study.pgn_storage_path]);
+
+        if (cleanupError) {
+          console.error("Superseded PGN cleanup failed:", cleanupError.message);
+        }
+      } catch (cleanupError) {
+        // The database reimport is already committed; an orphaned private file
+        // must not make the transactional replacement appear to have failed.
+        console.error("Superseded PGN cleanup failed:", cleanupError);
+      }
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath(`/studies/${studyId}`);
+    return { ok: true, studyId };
+  } catch (error) {
+    return importFailure(error, uploadedPgn);
+  }
+}
+
 export async function renameStudyAction(
   studyId: string,
   title: string,

@@ -2,14 +2,26 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Save, Trash2 } from "lucide-react";
+import { FileUp, LoaderCircle, RefreshCw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   deleteStudyAction,
+  reimportPgnAction,
   renameStudyAction,
 } from "@/lib/actions/studies";
 
@@ -22,6 +34,7 @@ export function StudyActions({
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
+  const [reimportOpen, setReimportOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function rename(event: React.FormEvent<HTMLFormElement>) {
@@ -30,6 +43,31 @@ export function StudyActions({
       const result = await renameStudyAction(studyId, title);
       if (result.ok) {
         toast.success("Study renamed.");
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
+  async function reimport(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const pastedPgn = formData.get("reimportPgnText");
+    const uploadedFile = formData.get("reimportPgnFile");
+    let pgnText = typeof pastedPgn === "string" ? pastedPgn : "";
+
+    if (uploadedFile instanceof File && uploadedFile.size > 0) {
+      pgnText = await uploadedFile.text();
+    }
+
+    startTransition(async () => {
+      const result = await reimportPgnAction(studyId, { pgnText });
+      if (result.ok) {
+        toast.success("Study reimported. Matching progress was preserved.");
+        form.reset();
+        setReimportOpen(false);
         router.refresh();
       } else {
         toast.error(result.error);
@@ -71,15 +109,77 @@ export function StudyActions({
           </Button>
         </div>
       </form>
-      <Button
-        type="button"
-        variant="destructive"
-        onClick={remove}
-        disabled={pending}
-      >
-        <Trash2 />
-        Delete study
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Dialog open={reimportOpen} onOpenChange={setReimportOpen}>
+          <DialogTrigger asChild>
+            <Button type="button" variant="outline" disabled={pending}>
+              <RefreshCw />
+              Reimport PGN
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <form onSubmit={reimport} className="contents">
+              <DialogHeader>
+                <DialogTitle>Replace this study&apos;s PGN?</DialogTitle>
+                <DialogDescription>
+                  Chapters and moves will be replaced. Training progress is
+                  kept only for positions with the same path in the new PGN.
+                  If the import fails, the current study remains unchanged.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reimport-pgn-text">Paste replacement PGN</Label>
+                  <Textarea
+                    id="reimport-pgn-text"
+                    name="reimportPgnText"
+                    placeholder={'[Event "Updated repertoire"]\n\n1. e4 e5 *'}
+                    className="min-h-40 font-mono"
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reimport-pgn-file">Or choose a PGN file</Label>
+                  <Input
+                    id="reimport-pgn-file"
+                    name="reimportPgnFile"
+                    type="file"
+                    accept=".pgn,application/x-chess-pgn,text/plain"
+                    disabled={pending}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline" disabled={pending}>
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button type="submit" disabled={pending}>
+                  {pending ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <FileUp />
+                  )}
+                  {pending ? "Reimporting…" : "Replace study"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={remove}
+          disabled={pending}
+        >
+          <Trash2 />
+          Delete study
+        </Button>
+      </div>
     </div>
   );
 }
