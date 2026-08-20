@@ -1,0 +1,166 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  assertSessionUsable,
+  buildChapterTrees,
+  progressFromRow,
+  progressToRow,
+} from "./training-helpers";
+
+const chapters = [
+  {
+    id: "chapter-1",
+    chapter_index: 0,
+    name: "Main line",
+    initial_fen: "root-fen",
+    headers: { Event: "Test" },
+  },
+];
+
+describe("buildChapterTrees", () => {
+  it("rebuilds parent-child adjacency regardless of row order", () => {
+    const trees = buildChapterTrees(chapters, [
+      {
+        id: "child",
+        chapter_id: "chapter-1",
+        parent_id: "root",
+        path_key: "c0:e2e4",
+        fen: "child-fen",
+        san: "e4",
+        uci: "e2e4",
+        ply: 1,
+        comment: "King pawn",
+        nags: [1],
+      },
+      {
+        id: "root",
+        chapter_id: "chapter-1",
+        parent_id: null,
+        path_key: "c0:",
+        fen: "root-fen",
+        san: null,
+        uci: null,
+        ply: 0,
+        comment: null,
+        nags: [],
+      },
+    ]);
+
+    expect(trees).toHaveLength(1);
+    expect(trees[0]).toMatchObject({
+      index: 0,
+      title: "Main line",
+      startingFen: "root-fen",
+      root: {
+        id: "root",
+        pathKey: "c0:",
+        children: [{ id: "child", pathKey: "c0:e2e4" }],
+      },
+    });
+  });
+
+  it("rejects a node whose parent is missing", () => {
+    expect(() =>
+      buildChapterTrees(chapters, [
+        {
+          id: "child",
+          chapter_id: "chapter-1",
+          parent_id: "missing",
+          path_key: "c0:e2e4",
+          fen: "child-fen",
+          san: "e4",
+          uci: "e2e4",
+          ply: 1,
+          comment: null,
+          nags: [],
+        },
+      ]),
+    ).toThrow("missing parent");
+  });
+
+  it("rejects chapters with multiple roots", () => {
+    const roots = ["root-1", "root-2"].map((id) => ({
+      id,
+      chapter_id: "chapter-1",
+      parent_id: null,
+      path_key: `c0:${id}`,
+      fen: "root-fen",
+      san: null,
+      uci: null,
+      ply: 0,
+      comment: null,
+      nags: [],
+    }));
+
+    expect(() => buildChapterTrees(chapters, roots)).toThrow(
+      "exactly one root",
+    );
+  });
+});
+
+describe("assertSessionUsable", () => {
+  const now = new Date("2026-08-20T12:00:00.000Z");
+
+  it("accepts an owned active session at the 14-day boundary", () => {
+    expect(() =>
+      assertSessionUsable(
+        {
+          user_id: "user-1",
+          mode: "practice",
+          status: "active",
+          updated_at: "2026-08-06T12:00:00.000Z",
+        },
+        "user-1",
+        "practice",
+        now,
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects a session older than 14 days", () => {
+    expect(() =>
+      assertSessionUsable(
+        {
+          user_id: "user-1",
+          mode: "practice",
+          status: "active",
+          updated_at: "2026-08-06T11:59:59.999Z",
+        },
+        "user-1",
+        "practice",
+        now,
+      ),
+    ).toThrow("expired");
+  });
+});
+
+describe("progress row mapping", () => {
+  it("maps scheduler fields without accepting client-shaped values", () => {
+    const progress = progressFromRow("c0:", {
+      attempts: 3,
+      correct_count: 2,
+      streak: 1,
+      mastery: 24,
+      last_reviewed_at: "2026-08-20T10:00:00.000Z",
+      due_at: "2026-08-21T10:00:00.000Z",
+    });
+
+    expect(progress).toEqual({
+      pathKey: "c0:",
+      attempts: 3,
+      correctCount: 2,
+      streak: 1,
+      mastery: 24,
+      lastReviewedAt: "2026-08-20T10:00:00.000Z",
+      nextReviewAt: "2026-08-21T10:00:00.000Z",
+    });
+    expect(progressToRow(progress)).toEqual({
+      attempts: 3,
+      correct_count: 2,
+      streak: 1,
+      mastery: 24,
+      last_reviewed_at: "2026-08-20T10:00:00.000Z",
+      due_at: "2026-08-21T10:00:00.000Z",
+    });
+  });
+});
