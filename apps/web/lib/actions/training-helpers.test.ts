@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   assertSessionUsable,
   buildChapterTrees,
+  parseClientCheckpointUpdate,
   progressFromRow,
   progressToRow,
+  trainingResultRpcPayload,
 } from "./training-helpers";
 
 const chapters = [
@@ -162,5 +164,82 @@ describe("progress row mapping", () => {
       last_reviewed_at: "2026-08-20T10:00:00.000Z",
       due_at: "2026-08-21T10:00:00.000Z",
     });
+  });
+});
+
+describe("trainingResultRpcPayload", () => {
+  it("sends only the result and position identity to the scoring RPC", () => {
+    expect(trainingResultRpcPayload("study-1", "c0:e2e4", true)).toEqual({
+      p_study_id: "study-1",
+      p_path_key: "c0:e2e4",
+      p_correct: true,
+    });
+  });
+});
+
+describe("parseClientCheckpointUpdate", () => {
+  const practiceCheckpoint = {
+    queue: [{ pathKey: "c0:", fen: "root-fen" }],
+    index: 0,
+    revealed: false,
+    side: "white" as const,
+    status: "active" as const,
+  };
+
+  it("rejects client completion and practice indices outside the queue", () => {
+    expect(() =>
+      parseClientCheckpointUpdate("practice", {
+        ...practiceCheckpoint,
+        status: "complete",
+      }, practiceCheckpoint),
+    ).toThrow("complete");
+    expect(() =>
+      parseClientCheckpointUpdate("practice", {
+        ...practiceCheckpoint,
+        index: practiceCheckpoint.queue.length,
+      }, practiceCheckpoint),
+    ).toThrow("index");
+  });
+
+  it("rejects empty paths, extra fields, and practice jumps", () => {
+    expect(() =>
+      parseClientCheckpointUpdate("practice", {
+        ...practiceCheckpoint,
+        queue: [{ pathKey: "", fen: "root-fen" }],
+      }, practiceCheckpoint),
+    ).toThrow("path");
+    expect(() =>
+      parseClientCheckpointUpdate("practice", {
+        ...practiceCheckpoint,
+        forged: true,
+      }, practiceCheckpoint),
+    ).toThrow("schema");
+    expect(() =>
+      parseClientCheckpointUpdate("practice", {
+        ...practiceCheckpoint,
+        queue: [
+          ...practiceCheckpoint.queue,
+          { pathKey: "c0:e2e4", fen: "after-e4" },
+        ],
+      }, practiceCheckpoint),
+    ).toThrow("current server checkpoint");
+  });
+
+  it("rejects learn path and stack jumps", () => {
+    const current = {
+      chapterIndex: 0,
+      pathKey: "c0:",
+      side: "white" as const,
+      sideMode: "white" as const,
+      stack: [],
+      status: "active" as const,
+    };
+    expect(() =>
+      parseClientCheckpointUpdate("learn", {
+        ...current,
+        pathKey: "c0:e2e4",
+        stack: ["c0:"],
+      }, current),
+    ).toThrow("current server checkpoint");
   });
 });

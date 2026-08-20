@@ -18,9 +18,9 @@ pnpm test
 2. In the project's **Connect** dialog, copy the project URL and publishable
    key into the matching environment variables. Do not use a service-role key
    in the web app.
-3. Apply `supabase/migrations/0001_init.sql`. Either link the Supabase CLI and
-   run `supabase db push`, or paste the migration into the dashboard SQL
-   Editor and run it once.
+3. Apply every file in `supabase/migrations` in migration order. Either link
+   the Supabase CLI and run `supabase db push`, or run each migration once in
+   the dashboard SQL Editor.
 4. In **Authentication > Providers**, enable Google and configure its OAuth
    client credentials.
 5. In **Authentication > URL Configuration**, set the local site URL to
@@ -31,3 +31,8 @@ pnpm test
 The migration creates owner-scoped RLS policies and a private `pgns` Storage
 bucket. Store uploads beneath a user-owned path such as
 `<auth-user-id>/<file-name>.pgn`.
+
+`position_progress` is read-only to authenticated clients. Training server
+actions must record attempts through `apply_training_result`, passing only the
+owned study, path key, and correctness result. The RPC applies the scheduler
+atomically; no client or server-action payload may provide mastery counters.

@@ -1,8 +1,6 @@
 "use server";
 
 import {
-  createInitialProgress,
-  createLightweightScheduler,
   findNodeByPathKey,
   learnApplyUserMove,
   learnAutoOpponentIfNeeded,
@@ -23,8 +21,9 @@ import { createClient } from "@/lib/supabase/server";
 import {
   assertSessionUsable,
   buildChapterTrees,
+  parseClientCheckpointUpdate,
   progressFromRow,
-  progressToRow,
+  trainingResultRpcPayload,
   type ChapterRow,
   type NodeRow,
   type ProgressRow,
@@ -160,6 +159,7 @@ async function saveSession(
     .eq("id", session.id)
     .eq("user_id", session.user_id)
     .eq("status", "active")
+    .eq("updated_at", session.updated_at)
     .select("id")
     .maybeSingle();
 
@@ -178,43 +178,23 @@ async function scorePosition(
   userId: string,
   pathKey: string,
   correct: boolean,
-  now = new Date(),
 ): Promise<PositionProgress> {
-  const { data, error } = await client
-    .from("position_progress")
-    .select(
-      "attempts,correct_count,streak,mastery,last_reviewed_at,due_at",
-    )
-    .eq("user_id", userId)
-    .eq("study_id", session.study_id)
-    .eq("path_key", pathKey)
-    .maybeSingle();
+  if (userId !== session.user_id) {
+    throw new Error("Training session is not owned by the current user");
+  }
+  const { data, error } = await client.rpc(
+    "apply_training_result",
+    trainingResultRpcPayload(session.study_id, pathKey, correct),
+  );
 
   if (error) {
     throw new Error(error.message);
   }
-
-  const previous = data
-    ? progressFromRow(pathKey, data as ProgressRow)
-    : createInitialProgress(pathKey, now);
-  const scheduler = createLightweightScheduler();
-  const progress = correct
-    ? scheduler.onCorrect(previous, now)
-    : scheduler.onIncorrect(previous, now);
-  const { error: writeError } = await client.from("position_progress").upsert(
-    {
-      user_id: userId,
-      study_id: session.study_id,
-      path_key: pathKey,
-      ...progressToRow(progress),
-    },
-    { onConflict: "user_id,study_id,path_key" },
-  );
-
-  if (writeError) {
-    throw new Error(writeError.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error("Training result did not return progress");
   }
-  return progress;
+  return progressFromRow(pathKey, row as ProgressRow);
 }
 
 function practiceState(checkpoint: unknown): PracticeState {
@@ -362,7 +342,11 @@ export async function saveCheckpointAction(
   const chapters = await studyChapters(client, session.study_id);
 
   if (session.mode === "learn") {
-    const state = learnState(checkpoint);
+    const state = parseClientCheckpointUpdate(
+      "learn",
+      checkpoint,
+      session.checkpoint,
+    );
     const chapter = chapters.find(
       (candidate) => candidate.index === state.chapterIndex,
     );
@@ -378,7 +362,11 @@ export async function saveCheckpointAction(
     return;
   }
 
-  const state = practiceState(checkpoint);
+  const state = parseClientCheckpointUpdate(
+    "practice",
+    checkpoint,
+    session.checkpoint,
+  );
   const validQueue = state.queue.every((card) => {
     const chapter = chapterForPath(chapters, card.pathKey);
     return findNodeByPathKey(chapter, card.pathKey)?.fen === card.fen;

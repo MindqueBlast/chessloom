@@ -5,6 +5,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient }));
 
 import {
   revealPracticeExpectedAction,
+  saveCheckpointAction,
   submitPracticeMoveAction,
 } from "./training";
 
@@ -44,7 +45,7 @@ function clientFixture() {
     updated_at: "2026-08-20T12:00:00.000Z",
   };
   let savedCheckpoint: unknown = checkpoint;
-  let savedProgress: Row | null = null;
+  let rpcPayload: Row | null = null;
 
   const client = {
     auth: {
@@ -53,6 +54,25 @@ function clientFixture() {
         error: null,
       })),
     },
+    rpc: vi.fn(async (name: string, values: Row) => {
+      if (name !== "apply_training_result") {
+        throw new Error(`Unexpected RPC ${name}`);
+      }
+      rpcPayload = values;
+      return {
+        data: {
+          attempts: 1,
+          correct_count: values.p_correct ? 1 : 0,
+          streak: values.p_correct ? 1 : 0,
+          mastery: values.p_correct ? 8 : 0,
+          last_reviewed_at: "2026-08-20T12:30:00.000Z",
+          due_at: values.p_correct
+            ? "2026-08-21T12:30:00.000Z"
+            : "2026-08-20T13:30:00.000Z",
+        },
+        error: null,
+      };
+    }),
     from: vi.fn((table: string) => {
       if (table === "training_sessions") {
         return {
@@ -116,15 +136,6 @@ function clientFixture() {
           ),
         };
       }
-      if (table === "position_progress") {
-        return {
-          select: vi.fn(() => query(() => ({ data: null, error: null }))),
-          upsert: vi.fn(async (values: Row) => {
-            savedProgress = values;
-            return { error: null };
-          }),
-        };
-      }
       throw new Error(`Unexpected table ${table}`);
     }),
   };
@@ -132,7 +143,7 @@ function clientFixture() {
   return {
     client,
     getSavedCheckpoint: () => savedCheckpoint,
-    getSavedProgress: () => savedProgress,
+    getRpcPayload: () => rpcPayload,
   };
 }
 
@@ -159,12 +170,10 @@ describe("authoritative practice actions", () => {
       progress: { attempts: 1, correctCount: 0, mastery: 0 },
     });
     expect(JSON.stringify(result)).not.toContain("e4");
-    expect(fixture.getSavedProgress()).toMatchObject({
-      user_id: "user-1",
-      study_id: "study-1",
-      path_key: "c0:",
-      attempts: 1,
-      correct_count: 0,
+    expect(fixture.getRpcPayload()).toEqual({
+      p_study_id: "study-1",
+      p_path_key: "c0:",
+      p_correct: false,
     });
   });
 
@@ -179,7 +188,7 @@ describe("authoritative practice actions", () => {
         uci: "e7e5",
       }),
     ).rejects.toThrow("current practice position");
-    expect(fixture.getSavedProgress()).toBeNull();
+    expect(fixture.getRpcPayload()).toBeNull();
   });
 
   it("reveals expected moves only through the reveal action", async () => {
@@ -190,5 +199,20 @@ describe("authoritative practice actions", () => {
       revealPracticeExpectedAction("session-1", "c0:"),
     ).resolves.toEqual({ sans: ["e4"], ucis: ["e2e4"] });
     expect(fixture.getSavedCheckpoint()).toMatchObject({ revealed: true });
+  });
+
+  it("rejects client-authored checkpoint completion", async () => {
+    const fixture = clientFixture();
+    createClient.mockResolvedValue(fixture.client);
+
+    await expect(
+      saveCheckpointAction("session-1", {
+        queue: [{ pathKey: "c0:", fen: "root-fen" }],
+        index: 1,
+        revealed: false,
+        side: "white",
+        status: "complete",
+      }),
+    ).rejects.toThrow("complete");
   });
 });

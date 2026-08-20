@@ -1,8 +1,13 @@
-import type {
-  ChapterTree,
-  PositionProgress,
-  SessionMode,
-  TreeNode,
+import {
+  parseLearnCheckpoint,
+  parsePracticeCheckpoint,
+  serializeCheckpoint,
+  type LearnState,
+  type PracticeState,
+  type ChapterTree,
+  type PositionProgress,
+  type SessionMode,
+  type TreeNode,
 } from "@chessloom/chess-core";
 
 export const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -43,6 +48,139 @@ export type ProgressRow = {
   last_reviewed_at: string | null;
   due_at: string;
 };
+
+function hasExactKeys(value: unknown, keys: readonly string[]): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return (
+    actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index])
+  );
+}
+
+function samePracticeState(a: PracticeState, b: PracticeState): boolean {
+  return (
+    a.index === b.index &&
+    a.revealed === b.revealed &&
+    a.side === b.side &&
+    a.status === b.status &&
+    a.queue.length === b.queue.length &&
+    a.queue.every(
+      (card, index) =>
+        card.pathKey === b.queue[index]?.pathKey &&
+        card.fen === b.queue[index]?.fen,
+    )
+  );
+}
+
+function sameLearnState(a: LearnState, b: LearnState): boolean {
+  return (
+    a.chapterIndex === b.chapterIndex &&
+    a.pathKey === b.pathKey &&
+    a.side === b.side &&
+    a.sideMode === b.sideMode &&
+    a.status === b.status &&
+    a.stack.length === b.stack.length &&
+    a.stack.every((pathKey, index) => pathKey === b.stack[index])
+  );
+}
+
+export function parseClientCheckpointUpdate(
+  mode: "learn",
+  checkpoint: unknown,
+  currentCheckpoint: unknown,
+): LearnState;
+export function parseClientCheckpointUpdate(
+  mode: "practice",
+  checkpoint: unknown,
+  currentCheckpoint: unknown,
+): PracticeState;
+export function parseClientCheckpointUpdate(
+  mode: SessionMode,
+  checkpoint: unknown,
+  currentCheckpoint: unknown,
+): LearnState | PracticeState {
+  if (mode === "learn") {
+    if (
+      !hasExactKeys(checkpoint, [
+        "chapterIndex",
+        "pathKey",
+        "side",
+        "sideMode",
+        "stack",
+        "status",
+      ])
+    ) {
+      throw new Error("Learn checkpoint schema is invalid");
+    }
+    const state = parseLearnCheckpoint(serializeCheckpoint(checkpoint));
+    const current = parseLearnCheckpoint(serializeCheckpoint(currentCheckpoint));
+    if (!state.pathKey.trim() || state.stack.some((pathKey) => !pathKey.trim())) {
+      throw new Error("Learn checkpoint path cannot be empty");
+    }
+    if (state.status === "complete") {
+      throw new Error("Client checkpoints cannot complete a session");
+    }
+    if (!sameLearnState(state, current)) {
+      throw new Error("Checkpoint does not match the current server checkpoint");
+    }
+    return state;
+  }
+
+  if (
+    !hasExactKeys(checkpoint, [
+      "queue",
+      "index",
+      "revealed",
+      "side",
+      "status",
+    ]) ||
+    !(checkpoint as { queue?: unknown }).queue ||
+    !Array.isArray((checkpoint as { queue: unknown }).queue) ||
+    !(checkpoint as { queue: unknown[] }).queue.every((card) =>
+      hasExactKeys(card, ["pathKey", "fen"]),
+    )
+  ) {
+    throw new Error("Practice checkpoint schema is invalid");
+  }
+  const state = parsePracticeCheckpoint(serializeCheckpoint(checkpoint));
+  const current = parsePracticeCheckpoint(serializeCheckpoint(currentCheckpoint));
+  if (state.queue.some((card) => !card.pathKey.trim())) {
+    throw new Error("Practice checkpoint path cannot be empty");
+  }
+  if (state.status === "complete") {
+    throw new Error("Client checkpoints cannot complete a session");
+  }
+  if (state.index >= state.queue.length) {
+    throw new Error("Practice checkpoint index must be within the queue");
+  }
+  if (!samePracticeState(state, current)) {
+    throw new Error("Checkpoint does not match the current server checkpoint");
+  }
+  return state;
+}
+
+export function trainingResultRpcPayload(
+  studyId: string,
+  pathKey: string,
+  correct: boolean,
+): {
+  p_study_id: string;
+  p_path_key: string;
+  p_correct: boolean;
+} {
+  if (!pathKey.trim()) {
+    throw new Error("Training result path cannot be empty");
+  }
+  return {
+    p_study_id: studyId,
+    p_path_key: pathKey,
+    p_correct: correct,
+  };
+}
 
 function stringRecord(value: unknown): Record<string, string> {
   if (
