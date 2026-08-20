@@ -28,10 +28,17 @@ describe("parsePgnToStudy", () => {
     expect(e4.children[0]!.pathKey).toBe("c0:e2e4/e7e5");
   });
 
-  it("keeps comments on nodes when present", () => {
+  it("keeps a move comment exactly once", () => {
     const study = parsePgnToStudy(`1. e4 {Best by test} e5 *`);
     const e4 = study.chapters[0]!.root.children[0]!;
-    expect(e4.comment).toMatch(/Best by test/);
+    expect(e4.comment).toBe("Best by test");
+  });
+
+  it("keeps a leading game comment on the chapter root", () => {
+    const study = parsePgnToStudy(`{Opening idea} 1. e4 *`);
+    const root = study.chapters[0]!.root;
+    expect(root.comment).toBe("Opening idea");
+    expect(root.pathKey).toBe("c0:");
   });
 
   it("throws on empty input", () => {

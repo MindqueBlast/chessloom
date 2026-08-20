@@ -5,7 +5,11 @@ import type { ChapterTree, Nag, TreeNode } from "../types.js";
 
 type ParsedMove = ParseTree["moves"][number];
 
-function createRoot(chapterIndex: number, chess: Chess): TreeNode {
+function createRoot(
+  chapterIndex: number,
+  chess: Chess,
+  comment: string | null,
+): TreeNode {
   return {
     id: crypto.randomUUID(),
     pathKey: buildPathKey(chapterIndex, []),
@@ -13,7 +17,7 @@ function createRoot(chapterIndex: number, chess: Chess): TreeNode {
     san: null,
     uci: null,
     ply: 0,
-    comment: null,
+    comment,
     nags: [],
     children: [],
   };
@@ -27,10 +31,12 @@ function parseNags(nags: string[] | null | undefined): Nag[] {
 
 function moveComment(move: ParsedMove): string | null {
   const comments = [
-    move.commentMove,
-    move.commentDiag?.comment,
-    move.commentAfter,
-  ].filter((comment): comment is string => Boolean(comment));
+    ...new Set(
+      [move.commentMove, move.commentDiag?.comment, move.commentAfter].filter(
+        (comment): comment is string => Boolean(comment),
+      ),
+    ),
+  ];
   return comments.length > 0 ? comments.join("\n") : null;
 }
 
@@ -89,7 +95,11 @@ export function buildChapter(
   const startingFen = headers.FEN;
   const chess = startingFen ? new Chess(startingFen) : new Chess();
   const normalizedStartingFen = chess.fen();
-  const root = createRoot(chapterIndex, chess);
+  const root = createRoot(
+    chapterIndex,
+    chess,
+    game.gameComment?.comment ?? null,
+  );
 
   appendLine(root, game.moves, chess, chapterIndex, []);
 
