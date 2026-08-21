@@ -2,12 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildFullTestQueue,
   buildRandomTestQueue,
+  buildTestSummary,
   clampRandomTestN,
   parseTestCheckpoint,
   serializeCheckpoint,
+  testAdvance,
+  testApplyMove,
+  testReveal,
+  type ChapterTree,
   type PositionProgress,
   type TestCard,
   type TestState,
+  type TreeNode,
 } from "../index.js";
 
 const fen = "8/8/8/8/8/8/8/K6k w - - 0 1";
@@ -110,6 +116,140 @@ describe("buildRandomTestQueue", () => {
 
     expect(queue.map((item) => item.pathKey)).toEqual(["a", "c", "d", "e", "f"]);
     expect(rng).toHaveBeenCalled();
+  });
+});
+
+function node(
+  pathKey: string,
+  fen: string,
+  san: string | null,
+  uci: string | null,
+  children: TreeNode[] = [],
+): TreeNode {
+  return {
+    id: pathKey,
+    pathKey,
+    fen,
+    san,
+    uci,
+    ply: pathKey === "c0:" ? 0 : pathKey.split("/").length,
+    comment: null,
+    nags: [],
+    children,
+  };
+}
+
+const whiteFen = "8/8/8/8/8/8/8/K6k w - - 0 1";
+const blackFen = "8/8/8/8/8/8/8/K6k b - - 0 1";
+const e5 = node("c0:e2e4/e7e5", whiteFen, "e5", "e7e5");
+const e4 = node("c0:e2e4", blackFen, "e4", "e2e4", [e5]);
+const root = node("c0:", whiteFen, null, null, [e4]);
+const chapter: ChapterTree = {
+  index: 0,
+  title: "Cards",
+  headers: {},
+  startingFen: whiteFen,
+  root,
+};
+const cards: TestCard[] = [
+  { pathKey: root.pathKey, fen: whiteFen },
+  { pathKey: e4.pathKey, fen: blackFen },
+];
+
+function baseTestState(queue = cards): TestState {
+  return {
+    mode: "random_test",
+    queue,
+    index: 0,
+    revealed: false,
+    side: "white",
+    sideMode: "both",
+    status: "active",
+    targetCount: 20,
+    correctCount: 0,
+    incorrectCount: 0,
+    weakPathKeys: [],
+  };
+}
+
+describe("test move grading", () => {
+  it("tracks incorrect answers without advancing", () => {
+    const state = baseTestState();
+    const result = testApplyMove(state, chapter, { san: "d4" });
+
+    expect(result.feedback).toEqual({ ok: false, expected: [e4] });
+    expect(result.state).toMatchObject({
+      index: 0,
+      incorrectCount: 1,
+      weakPathKeys: ["c0:"],
+      status: "active",
+    });
+  });
+
+  it("does not duplicate weak path keys", () => {
+    const state = {
+      ...baseTestState(),
+      incorrectCount: 1,
+      weakPathKeys: ["c0:"],
+    };
+    const result = testApplyMove(state, chapter, { san: "d4" });
+
+    expect(result.state.weakPathKeys).toEqual(["c0:"]);
+    expect(result.state.incorrectCount).toBe(2);
+  });
+
+  it("advances and counts a correct answer", () => {
+    const state = testReveal(baseTestState());
+    const result = testApplyMove(state, chapter, { uci: "e2e4" });
+
+    expect(result.feedback).toEqual({ ok: true, child: e4 });
+    expect(result.state).toMatchObject({
+      index: 1,
+      revealed: false,
+      correctCount: 1,
+      status: "active",
+    });
+  });
+
+  it("reveals and advances after an incorrect answer", () => {
+    const incorrect = testApplyMove(baseTestState(), chapter, { san: "d4" }).state;
+    expect(testReveal(incorrect).revealed).toBe(true);
+    expect(testAdvance(incorrect)).toMatchObject({
+      index: 1,
+      revealed: false,
+      incorrectCount: 1,
+      status: "active",
+    });
+  });
+
+  it("completes after the final card", () => {
+    const state = baseTestState([cards[0]!]);
+    const result = testApplyMove(state, chapter, { uci: "e2e4" });
+
+    expect(result.state.status).toBe("complete");
+    expect(buildTestSummary(result.state)).toEqual({
+      accuracy: 1,
+      correctCount: 1,
+      incorrectCount: 0,
+      weakPathKeys: [],
+    });
+  });
+
+  it("builds summary accuracy from session counters", () => {
+    expect(
+      buildTestSummary({
+        ...baseTestState(),
+        correctCount: 3,
+        incorrectCount: 1,
+        weakPathKeys: ["c0:"],
+        status: "complete",
+      }),
+    ).toEqual({
+      accuracy: 0.75,
+      correctCount: 3,
+      incorrectCount: 1,
+      weakPathKeys: ["c0:"],
+    });
   });
 });
 

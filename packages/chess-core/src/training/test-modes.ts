@@ -1,4 +1,9 @@
-import type { Fen, PathKey, PositionProgress } from "../types.js";
+import {
+  findNodeByPathKey,
+  isRepertoireMove,
+  type MatchResult,
+} from "../tree/match.js";
+import type { ChapterTree, Fen, PathKey, PositionProgress } from "../types.js";
 import type { TrainingSide } from "./side.js";
 
 export interface TestCard {
@@ -117,4 +122,84 @@ export function buildRandomTestQueue(
   }
 
   return queue.slice(0, targetCount);
+}
+
+export interface TestSummary {
+  accuracy: number;
+  correctCount: number;
+  incorrectCount: number;
+  weakPathKeys: PathKey[];
+}
+
+function appendWeakPathKey(state: TestState, pathKey: PathKey): PathKey[] {
+  return state.weakPathKeys.includes(pathKey)
+    ? state.weakPathKeys
+    : [...state.weakPathKeys, pathKey];
+}
+
+function advanceTestState(state: TestState): TestState {
+  const index = state.index + 1;
+  return {
+    ...state,
+    index,
+    revealed: false,
+    status: index >= state.queue.length ? "complete" : "active",
+  };
+}
+
+export function buildTestSummary(state: TestState): TestSummary {
+  const total = state.correctCount + state.incorrectCount;
+  return {
+    accuracy: total === 0 ? 1 : state.correctCount / total,
+    correctCount: state.correctCount,
+    incorrectCount: state.incorrectCount,
+    weakPathKeys: state.weakPathKeys,
+  };
+}
+
+export function testApplyMove(
+  state: TestState,
+  chapter: ChapterTree,
+  move: { san?: string; uci?: string },
+): { state: TestState; feedback: MatchResult } {
+  const card = state.queue[state.index];
+  if (!card) {
+    throw new Error("Cannot apply a move to a completed test session");
+  }
+
+  const node = findNodeByPathKey(chapter, card.pathKey);
+  if (!node) {
+    throw new Error(`Test card path not found: ${card.pathKey}`);
+  }
+
+  const feedback = isRepertoireMove(node, move);
+  if (!feedback.ok) {
+    return {
+      state: {
+        ...state,
+        incorrectCount: state.incorrectCount + 1,
+        weakPathKeys: appendWeakPathKey(state, card.pathKey),
+      },
+      feedback,
+    };
+  }
+
+  return {
+    state: {
+      ...advanceTestState(state),
+      correctCount: state.correctCount + 1,
+    },
+    feedback,
+  };
+}
+
+export function testReveal(state: TestState): TestState {
+  return state.revealed ? state : { ...state, revealed: true };
+}
+
+export function testAdvance(state: TestState): TestState {
+  if (!state.queue[state.index]) {
+    throw new Error("Cannot advance a completed test session");
+  }
+  return advanceTestState(state);
 }

@@ -8,15 +8,21 @@ import {
   learnAutoOpponentIfNeeded,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
+  parseTestCheckpoint,
   practiceApplyMove,
   practiceReveal,
   serializeCheckpoint,
+  testAdvance,
+  testApplyMove,
+  testReveal,
+  buildTestSummary,
   type ChapterTree,
   type LearnState,
   type PositionProgress,
   type PracticeState,
   type SessionMode,
   type SideMode,
+  type TestState,
 } from "@chessloom/chess-core";
 
 import { createClient } from "@/lib/supabase/server";
@@ -63,6 +69,12 @@ type MoveResult = {
   expectedCount: number;
   progress?: PositionProgress;
   checkpoint: unknown;
+  summary?: {
+    accuracy: number;
+    correctCount: number;
+    incorrectCount: number;
+    weakPathKeys: string[];
+  };
 };
 
 function jsonValue(value: unknown): unknown {
@@ -175,7 +187,7 @@ function chapterForPath(chapters: ChapterTree[], pathKey: string): ChapterTree {
 
 async function saveSession(
   session: TrainingSessionRow,
-  checkpoint: LearnState | PracticeState,
+  checkpoint: LearnState | PracticeState | TestState,
 ): Promise<unknown> {
   const client: ServiceClient = createServiceClient();
   const safeCheckpoint = jsonValue(checkpoint);
@@ -204,7 +216,7 @@ async function scorePositionAndSave(
   userId: string,
   pathKey: string,
   correct: boolean,
-  checkpoint: LearnState | PracticeState,
+  checkpoint: LearnState | PracticeState | TestState,
 ): Promise<{ progress: PositionProgress; checkpoint: unknown }> {
   if (userId !== session.user_id) {
     throw new Error("Training session is not owned by the current user");
@@ -266,6 +278,54 @@ function practiceState(checkpoint: unknown): PracticeState {
 
 function learnState(checkpoint: unknown): LearnState {
   return parseLearnCheckpoint(serializeCheckpoint(checkpoint));
+}
+
+function testState(checkpoint: unknown): TestState {
+  return parseTestCheckpoint(serializeCheckpoint(checkpoint));
+}
+
+
+function testSummaryForState(state: TestState): MoveResult["summary"] | undefined {
+  return state.status === "complete" ? buildTestSummary(state) : undefined;
+}
+
+async function ownedTestSession(
+  client: SupabaseClient,
+  sessionId: string,
+): Promise<{ session: TrainingSessionRow; userId: string }> {
+  const user = await currentUser(client);
+  const { data, error } = await client
+    .from("training_sessions")
+    .select("id,user_id,study_id,mode,checkpoint,status,updated_at")
+    .eq("id", sessionId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Training session was not found");
+  }
+
+  const session = data as TrainingSessionRow;
+  if (session.mode !== "random_test" && session.mode !== "full_test") {
+    throw new Error("Training session mode does not match this action");
+  }
+
+  try {
+    assertSessionUsable(session, user.id, session.mode);
+  } catch (guardError) {
+    if (
+      guardError instanceof Error &&
+      guardError.message === "Training session has expired"
+    ) {
+      await abandonSession(session);
+    }
+    throw guardError;
+  }
+
+  return { session, userId: user.id };
 }
 
 export type TrainingSessionStartOptions = {
@@ -419,6 +479,86 @@ export async function revealPracticeExpectedAction(
     ucis: node.children.flatMap((child) =>
       child.uci === null ? [] : [child.uci],
     ),
+  };
+}
+
+export async function submitTestMoveAction(input: {
+  sessionId: string;
+  pathKey: string;
+  uci: string;
+}): Promise<MoveResult> {
+  const client = await createClient();
+  const { session, userId } = await ownedTestSession(client, input.sessionId);
+  const state = testState(session.checkpoint);
+  const card = state.queue[state.index];
+  if (!card || card.pathKey !== input.pathKey) {
+    throw new Error("Move does not match the current test position");
+  }
+
+  const chapters = await studyChapters(client, session.study_id);
+  const chapter = chapterForPath(chapters, input.pathKey);
+  const result = testApplyMove(state, chapter, { uci: input.uci });
+  const committed = await scorePositionAndSave(
+    session,
+    userId,
+    input.pathKey,
+    result.feedback.ok,
+    result.state,
+  );
+
+  return {
+    ok: result.feedback.ok,
+    expectedCount: result.feedback.ok ? 0 : result.feedback.expected.length,
+    progress: committed.progress,
+    checkpoint: committed.checkpoint,
+    summary: testSummaryForState(result.state),
+  };
+}
+
+export async function revealTestExpectedAction(
+  sessionId: string,
+  pathKey: string,
+): Promise<{ sans: string[]; ucis: string[] }> {
+  const client = await createClient();
+  const { session } = await ownedTestSession(client, sessionId);
+  const state = testState(session.checkpoint);
+  const card = state.queue[state.index];
+  if (!card || card.pathKey !== pathKey) {
+    throw new Error("Reveal does not match the current test position");
+  }
+
+  const chapters = await studyChapters(client, session.study_id);
+  const chapter = chapterForPath(chapters, pathKey);
+  const node = findNodeByPathKey(chapter, pathKey)!;
+  await saveSession(session, testReveal(state));
+
+  return {
+    sans: node.children.flatMap((child) =>
+      child.san === null ? [] : [child.san],
+    ),
+    ucis: node.children.flatMap((child) =>
+      child.uci === null ? [] : [child.uci],
+    ),
+  };
+}
+
+export async function advanceTestAction(
+  sessionId: string,
+  pathKey: string,
+): Promise<{ checkpoint: unknown; summary?: MoveResult["summary"] }> {
+  const client = await createClient();
+  const { session } = await ownedTestSession(client, sessionId);
+  const state = testState(session.checkpoint);
+  const card = state.queue[state.index];
+  if (!card || card.pathKey !== pathKey) {
+    throw new Error("Advance does not match the current test position");
+  }
+
+  const nextState = testAdvance(state);
+  const checkpoint = await saveSession(session, nextState);
+  return {
+    checkpoint,
+    summary: testSummaryForState(nextState),
   };
 }
 
