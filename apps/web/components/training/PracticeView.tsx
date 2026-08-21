@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
+import { AnalysisPanel } from "@/components/engine/AnalysisPanel";
 import { Button } from "@/components/ui/button";
 import {
   revealPracticeExpectedAction,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/actions/training";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
-import { shortcutForKey } from "@/lib/training/ui";
+import { applyUciToFen, shortcutForKey } from "@/lib/training/ui";
 import { toastCopy } from "@/lib/toasts";
 
 import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
@@ -40,6 +41,7 @@ export function PracticeView({
   const [checkpoint, setCheckpoint] = useState(initialCheckpoint);
   const [pendingCheckpoint, setPendingCheckpoint] =
     useState<PracticeState | null>(null);
+  const [boardFen, setBoardFen] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     kind: FeedbackKind;
     animate: boolean;
@@ -52,6 +54,10 @@ export function PracticeView({
   const viewedCard = checkpoint.queue[viewedIndex] ?? currentCard;
   const isCurrentPosition = viewedIndex === checkpoint.index;
   const announcedComplete = useRef(initialCheckpoint.status === "complete");
+  const displayFen =
+    isCurrentPosition && boardFen
+      ? boardFen
+      : (viewedCard?.fen ?? currentCard?.fen ?? "");
 
   useEffect(() => {
     const complete =
@@ -67,6 +73,7 @@ export function PracticeView({
   function retry() {
     setFeedback(null);
     setExpected([]);
+    setBoardFen(null);
   }
 
   function continueTraining() {
@@ -74,6 +81,7 @@ export function PracticeView({
     setCheckpoint(pendingCheckpoint);
     setViewedIndex(pendingCheckpoint.index);
     setPendingCheckpoint(null);
+    setBoardFen(null);
     setFeedback(null);
     setExpected([]);
   }
@@ -84,6 +92,9 @@ export function PracticeView({
     }
     setFeedback(null);
     setExpected([]);
+    const movedFen = applyUciToFen(currentCard.fen, uci);
+    if (movedFen) setBoardFen(movedFen);
+
     startTransition(async () => {
       try {
         const result = await submitPracticeMoveAction({
@@ -106,6 +117,7 @@ export function PracticeView({
         const message =
           error instanceof Error ? error.message : toastCopy.serverError;
         toast.error(message);
+        setBoardFen(null);
         setFeedback({ kind: "error", animate });
         setExpected([message]);
       }
@@ -204,10 +216,13 @@ export function PracticeView({
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
       <ChessBoard
-        fen={viewedCard.fen}
+        fen={displayFen}
         orientation={checkpoint.side}
         disabled={
-          pending || Boolean(pendingCheckpoint) || !isCurrentPosition
+          pending ||
+          Boolean(pendingCheckpoint) ||
+          !isCurrentPosition ||
+          feedback?.kind === "incorrect"
         }
         onMove={submitMove}
       />
@@ -252,6 +267,8 @@ export function PracticeView({
           description={errorDescription ?? incorrectDescription}
           animate={feedback?.animate}
         />
+
+        {displayFen ? <AnalysisPanel fen={displayFen} /> : null}
 
         <div className="flex flex-wrap gap-2">
           {pending ? (

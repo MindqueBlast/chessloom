@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
+import { AnalysisPanel } from "@/components/engine/AnalysisPanel";
 import { Button } from "@/components/ui/button";
 import {
   advanceTestAction,
@@ -319,6 +320,8 @@ export function TestView({
           description={errorDescription ?? incorrectDescription}
           animate={feedback?.animate}
         />
+
+        {displayFen ? <AnalysisPanel fen={displayFen} /> : null}
 
         <div className="flex flex-wrap gap-2">
           {pending ? (

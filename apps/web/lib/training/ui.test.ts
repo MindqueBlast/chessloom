@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PRACTICE_INCORRECT_COPY,
+  applyUciToFen,
   boardAnimationOptions,
   shortcutForKey,
   toUci,
@@ -12,6 +13,16 @@ describe("training UI helpers", () => {
     expect(toUci("e2", "e4", "wP")).toBe("e2e4");
     expect(toUci("a7", "a8", "wP")).toBe("a7a8q");
     expect(toUci("h2", "h1", "bP")).toBe("h2h1q");
+  });
+
+  it("applies a legal UCI move to a FEN for immediate board feedback", () => {
+    const start =
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const next = applyUciToFen(start, "e2e4");
+    expect(next).toBe(
+      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    );
+    expect(applyUciToFen(start, "e2e5")).toBeNull();
   });
 
   it("maps supported keyboard shortcuts and ignores repeated keydown events", () => {

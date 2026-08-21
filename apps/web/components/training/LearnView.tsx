@@ -10,13 +10,19 @@ import {
 } from "@chessloom/chess-core";
 import { ArrowLeft, ArrowRight, LoaderCircle, RotateCcw } from "lucide-react";
 import Link from "next/link";
+import { useReducedMotion } from "motion/react";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
+import { AnalysisPanel } from "@/components/engine/AnalysisPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { submitLearnMoveAction } from "@/lib/actions/training";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
-import { shortcutForKey } from "@/lib/training/ui";
+import {
+  OPPONENT_FOLLOW_MS,
+  applyUciToFen,
+  shortcutForKey,
+} from "@/lib/training/ui";
 import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
 import { toastCopy } from "@/lib/toasts";
 
@@ -42,10 +48,12 @@ export function LearnView({
   chapters: ChapterTree[];
   initialCheckpoint: LearnState;
 }) {
+  const reduceMotion = useReducedMotion();
   const [checkpoint, setCheckpoint] = useState(initialCheckpoint);
   const [pendingCheckpoint, setPendingCheckpoint] = useState<LearnState | null>(
     null,
   );
+  const [boardFen, setBoardFen] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     kind: FeedbackKind;
     description?: string;
@@ -54,6 +62,7 @@ export function LearnView({
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
   const announcedComplete = useRef(initialCheckpoint.status === "complete");
+  const opponentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chapter = chapters.find(
     (candidate) => candidate.index === checkpoint.chapterIndex,
@@ -63,24 +72,47 @@ export function LearnView({
   const viewedPath = history[viewedIndex] ?? checkpoint.pathKey;
   const node = chapter ? findNode(chapter.root, viewedPath) : null;
   const isCurrentPosition = viewedPath === checkpoint.pathKey;
+  const displayFen =
+    isCurrentPosition && boardFen ? boardFen : (node?.fen ?? "");
+
+  useEffect(() => {
+    return () => {
+      if (opponentTimer.current) clearTimeout(opponentTimer.current);
+    };
+  }, []);
+
+  function clearOpponentTimer() {
+    if (opponentTimer.current) {
+      clearTimeout(opponentTimer.current);
+      opponentTimer.current = null;
+    }
+  }
 
   function retry() {
+    clearOpponentTimer();
     setFeedback(null);
     setPendingCheckpoint(null);
+    setBoardFen(null);
   }
 
   function continueTraining() {
+    clearOpponentTimer();
     if (pendingCheckpoint) {
       setCheckpoint(pendingCheckpoint);
       setPendingCheckpoint(null);
       setHistoryIndex(null);
     }
+    setBoardFen(null);
     setFeedback(null);
   }
 
   function submitMove(uci: string, animate = true) {
-    if (pending || pendingCheckpoint || !isCurrentPosition) return;
+    if (pending || pendingCheckpoint || !isCurrentPosition || !node) return;
+    clearOpponentTimer();
     setFeedback(null);
+    const movedFen = applyUciToFen(node.fen, uci);
+    if (movedFen) setBoardFen(movedFen);
+
     startTransition(async () => {
       try {
         const result = await submitLearnMoveAction({
@@ -89,13 +121,31 @@ export function LearnView({
           uci,
         });
         if (result.ok) {
-          setPendingCheckpoint(
-            applyResolvedMoveCheckpoint(
-              result.checkpoint,
-              parseLearnCheckpoint,
-            ),
+          const next = applyResolvedMoveCheckpoint(
+            result.checkpoint,
+            parseLearnCheckpoint,
           );
+          setPendingCheckpoint(next);
           setFeedback({ kind: "correct", animate });
+
+          const resolvedChapter = chapters.find(
+            (candidate) => candidate.index === next.chapterIndex,
+          );
+          const resolvedNode = resolvedChapter
+            ? findNode(resolvedChapter.root, next.pathKey)
+            : null;
+          if (
+            resolvedNode &&
+            movedFen &&
+            resolvedNode.fen !== movedFen
+          ) {
+            const delay = reduceMotion ? 0 : OPPONENT_FOLLOW_MS;
+            opponentTimer.current = setTimeout(() => {
+              setBoardFen(resolvedNode.fen);
+            }, delay);
+          } else if (resolvedNode) {
+            setBoardFen(resolvedNode.fen);
+          }
         } else {
           setFeedback({
             kind: "incorrect",
@@ -107,6 +157,7 @@ export function LearnView({
         const message =
           error instanceof Error ? error.message : toastCopy.serverError;
         toast.error(message);
+        setBoardFen(null);
         setFeedback({
           kind: "error",
           description: message,
@@ -142,8 +193,10 @@ export function LearnView({
         );
       } else if (shortcut === "retry") {
         retry();
-      } else if (feedback) {
+      } else if (pendingCheckpoint) {
         continueTraining();
+      } else if (feedback) {
+        retry();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -168,13 +221,14 @@ export function LearnView({
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
       <ChessBoard
-        fen={node.fen}
+        fen={displayFen}
         orientation={checkpoint.side}
         disabled={
           pending ||
           Boolean(pendingCheckpoint) ||
           !isCurrentPosition ||
-          checkpoint.status === "complete"
+          checkpoint.status === "complete" ||
+          feedback?.kind === "incorrect"
         }
         onMove={submitMove}
       />
@@ -263,7 +317,10 @@ export function LearnView({
           </Card>
         ) : null}
 
-        {isCurrentPosition && node.children.length > 1 && !pendingCheckpoint ? (
+        {isCurrentPosition &&
+        node.children.length > 1 &&
+        !pendingCheckpoint &&
+        !feedback ? (
           <Card size="sm">
             <CardHeader>
               <CardTitle>Choose a branch</CardTitle>
@@ -285,6 +342,8 @@ export function LearnView({
             </CardContent>
           </Card>
         ) : null}
+
+        {displayFen ? <AnalysisPanel fen={displayFen} /> : null}
 
         <div className="flex flex-wrap gap-2">
           {pending ? (
