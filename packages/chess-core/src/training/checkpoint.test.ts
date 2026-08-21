@@ -63,6 +63,14 @@ describe("training checkpoints", () => {
     expect(parsePracticeCheckpoint(serializeCheckpoint(state))).toEqual(state);
   });
 
+  it("defaults missing practice sideMode from resolved side", () => {
+    expect(
+      parsePracticeCheckpoint(
+        '{"queue":[{"pathKey":"c4:","fen":"8/8/8/8/8/8/8/K6k w - - 0 1"}],"index":0,"revealed":false,"side":"white","status":"active"}',
+      ),
+    ).toMatchObject({ side: "white", sideMode: "white" });
+  });
+
   it("rejects invalid JSON and malformed learn state", () => {
     expect(() => parseLearnCheckpoint("{")).toThrow("Invalid learn checkpoint");
     expect(() =>

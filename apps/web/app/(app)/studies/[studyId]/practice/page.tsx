@@ -8,6 +8,7 @@ import {
 } from "@chessloom/chess-core";
 
 import { AppHeader } from "@/components/app/AppHeader";
+import { PageTransition } from "@/components/motion/PageTransition";
 import { PracticeView } from "@/components/training/PracticeView";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,10 +28,21 @@ export default async function PracticePage({
   searchParams,
 }: {
   params: Promise<{ studyId: string }>;
-  searchParams: Promise<{ side?: string; fresh?: string }>;
+  searchParams: Promise<{
+    side?: string;
+    fresh?: string;
+    queue?: string;
+    ahead?: string;
+    notice?: string;
+  }>;
 }) {
   const { studyId } = await params;
-  const start = parseTrainingStartQuery(await searchParams);
+  const rawParams = await searchParams;
+  const start = parseTrainingStartQuery(rawParams);
+  const noticeParam =
+    rawParams.notice === "fresh" || rawParams.notice === "resumed"
+      ? rawParams.notice
+      : undefined;
   const supabase = await createClient();
   const { data: study } = await supabase
     .from("studies")
@@ -40,24 +52,30 @@ export default async function PracticePage({
 
   if (!study) notFound();
 
-  const { session } = await loadTrainingSession(
+  const skipResume = Boolean(
+    start.fresh || start.sideMode || start.queueMode,
+  );
+  const { session, restored } = await loadTrainingSession(
     () =>
-      start.fresh || start.sideMode
+      skipResume
         ? Promise.resolve(null)
         : resumeSessionAction(studyId, "practice"),
     () =>
       startTrainingSessionAction(studyId, "practice", {
         sideMode: start.sideMode,
+        queueMode: start.queueMode,
       }),
   );
 
-  if (start.fresh || start.sideMode) {
-    redirect(trainingPath(studyId, "practice"));
+  if (start.fresh || start.sideMode || start.queueMode) {
+    redirect(`${trainingPath(studyId, "practice")}?notice=fresh`);
   }
 
   const checkpoint = parsePracticeCheckpoint(
     serializeCheckpoint(session.checkpoint),
   );
+  const sessionNotice =
+    noticeParam ?? (restored ? "resumed" : "fresh");
 
   return (
     <main className="min-h-svh bg-background">
@@ -69,11 +87,14 @@ export default async function PracticePage({
             {study.title}
           </Link>
         </Button>
-        <PracticeView
-          studyId={studyId}
-          sessionId={session.sessionId}
-          initialCheckpoint={checkpoint}
-        />
+        <PageTransition>
+          <PracticeView
+            studyId={studyId}
+            sessionId={session.sessionId}
+            initialCheckpoint={checkpoint}
+            sessionNotice={sessionNotice}
+          />
+        </PageTransition>
       </section>
     </main>
   );

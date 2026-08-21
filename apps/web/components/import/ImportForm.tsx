@@ -15,6 +15,7 @@ import {
   type StudyActionResult,
 } from "@/lib/actions/studies";
 import { motionTokens } from "@/lib/motion/tokens";
+import { useSound } from "@/lib/sound/useSound";
 import { toastCopy } from "@/lib/toasts";
 
 const initialState: StudyActionResult | null = null;
@@ -22,6 +23,7 @@ const initialState: StudyActionResult | null = null;
 export function ImportForm() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const { play } = useSound();
   const [state, formAction, pending] = useActionState(
     importPgnFormAction,
     initialState,
@@ -33,13 +35,14 @@ export function ImportForm() {
     }
 
     if (state.ok) {
+      play("importSuccess");
       toast.success(toastCopy.studyImported);
       router.push(`/studies/${state.studyId}`);
       return;
     }
 
     toast.error(state.error || toastCopy.pgnParseFailed);
-  }, [router, state]);
+  }, [play, router, state]);
 
   return (
     <form action={formAction} className="space-y-6">

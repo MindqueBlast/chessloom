@@ -105,6 +105,7 @@ function samePracticeState(a: PracticeState, b: PracticeState): boolean {
     a.index === b.index &&
     a.revealed === b.revealed &&
     a.side === b.side &&
+    a.sideMode === b.sideMode &&
     a.status === b.status &&
     a.queue.length === b.queue.length &&
     a.queue.every(
@@ -351,6 +352,8 @@ export function collectTrainableCards(chapters: ChapterTree[]): TestCard[] {
   return cards;
 }
 
+export type PracticeQueueMode = "due" | "weak" | "study_ahead";
+
 export function createInitialTrainingCheckpoint(
   mode: "learn",
   chapters: ChapterTree[],
@@ -363,6 +366,7 @@ export function createInitialTrainingCheckpoint(
   sideMode: SideMode,
   progressRows?: PracticeProgressRow[],
   now?: Date,
+  queueMode?: PracticeQueueMode,
 ): PracticeState;
 export function createInitialTrainingCheckpoint(
   mode: SessionMode,
@@ -370,6 +374,7 @@ export function createInitialTrainingCheckpoint(
   sideMode: SideMode,
   progressRows?: PracticeProgressRow[],
   now?: Date,
+  queueMode?: PracticeQueueMode,
 ): LearnState | PracticeState;
 export function createInitialTrainingCheckpoint(
   mode: SessionMode,
@@ -377,6 +382,7 @@ export function createInitialTrainingCheckpoint(
   sideMode: SideMode,
   progressRowsOrChapterIndex: PracticeProgressRow[] | number = [],
   now = new Date(),
+  queueMode: PracticeQueueMode = "due",
 ): LearnState | PracticeState {
   const chapterIndex =
     typeof progressRowsOrChapterIndex === "number"
@@ -400,7 +406,12 @@ export function createInitialTrainingCheckpoint(
   }
 
   return startPractice(
-    buildPracticeQueue(collectTrainableCards(chapters), progressRows, now),
+    buildPracticeQueue(
+      collectTrainableCards(chapters),
+      progressRows,
+      now,
+      queueMode,
+    ),
     sideMode,
   );
 }
@@ -477,6 +488,7 @@ export function buildPracticeQueue(
   cards: Array<{ pathKey: string; fen: string }>,
   progressRows: PracticeProgressRow[] = [],
   now = new Date(),
+  queueMode: PracticeQueueMode = "due",
 ): Array<{ pathKey: string; fen: string }> {
   const progressByPath = new Map(
     progressRows.map((row) => [
@@ -488,15 +500,59 @@ export function buildPracticeQueue(
   const nowIso = now.toISOString();
 
   return cards
-    .map((card) => ({
-      card,
-      progress:
-        progressByPath.get(card.pathKey) ??
-        createInitialFsrsProgress(card.pathKey, now),
-    }))
-    .filter(({ progress }) => progress.nextReviewAt <= nowIso)
-    .sort((a, b) => scheduler.compareDue(a.progress, b.progress))
+    .map((card) => {
+      const existing = progressByPath.get(card.pathKey);
+      return {
+        card,
+        progress: existing ?? createInitialFsrsProgress(card.pathKey, now),
+        isNew: !existing,
+      };
+    })
+    .filter(({ progress, isNew }) => {
+      const due = progress.nextReviewAt <= nowIso;
+      const weak = progress.mastery < 40;
+      if (queueMode === "due") return due;
+      if (queueMode === "weak") return weak || isNew;
+      // study_ahead: due, weak, or unseen
+      return due || weak || isNew;
+    })
+    .sort((a, b) => {
+      if (queueMode === "weak" || queueMode === "study_ahead") {
+        const masteryDelta = a.progress.mastery - b.progress.mastery;
+        if (masteryDelta !== 0) return masteryDelta;
+      }
+      return scheduler.compareDue(a.progress, b.progress);
+    })
     .map(({ card }) => card);
+}
+
+export function findNextPracticeDueAt(
+  cards: Array<{ pathKey: string; fen: string }>,
+  progressRows: PracticeProgressRow[] = [],
+  now = new Date(),
+): string | null {
+  const nowMs = now.getTime();
+  let next: number | null = null;
+  const progressByPath = new Map(
+    progressRows.map((row) => [row.path_key, row]),
+  );
+
+  for (const card of cards) {
+    const row = progressByPath.get(card.pathKey);
+    if (!row) {
+      return now.toISOString();
+    }
+    const dueMs = new Date(row.due_at).getTime();
+    if (!Number.isFinite(dueMs)) continue;
+    if (dueMs <= nowMs) {
+      return new Date(dueMs).toISOString();
+    }
+    if (next === null || dueMs < next) {
+      next = dueMs;
+    }
+  }
+
+  return next === null ? null : new Date(next).toISOString();
 }
 
 export function assertSessionUsable(

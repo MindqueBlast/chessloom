@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  formatPathLabel,
   parseLearnCheckpoint,
+  sideToMove,
   type ChapterTree,
   type LearnState,
   type TreeNode,
@@ -13,10 +15,18 @@ import Link from "next/link";
 import { useReducedMotion } from "motion/react";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
-import { AnalysisPanel } from "@/components/engine/AnalysisPanel";
+import { LazyAnalysisPanel } from "@/components/engine/LazyAnalysisPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { submitLearnMoveAction } from "@/lib/actions/training";
+import {
+  selectLearnBranchAction,
+  submitLearnMoveAction,
+} from "@/lib/actions/training";
+import {
+  LEARN_AUTO_CONTINUE_KEY,
+  normalizeLearnAutoContinue,
+} from "@/lib/settings/preferences";
+import { useSound } from "@/lib/sound/useSound";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import {
   OPPONENT_FOLLOW_MS,
@@ -49,6 +59,7 @@ export function LearnView({
   initialCheckpoint: LearnState;
 }) {
   const reduceMotion = useReducedMotion();
+  const { play } = useSound();
   const [checkpoint, setCheckpoint] = useState(initialCheckpoint);
   const [pendingCheckpoint, setPendingCheckpoint] = useState<LearnState | null>(
     null,
@@ -61,8 +72,10 @@ export function LearnView({
   } | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
+  const [autoContinue, setAutoContinue] = useState(false);
   const announcedComplete = useRef(initialCheckpoint.status === "complete");
   const opponentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoContinueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chapter = chapters.find(
     (candidate) => candidate.index === checkpoint.chapterIndex,
@@ -74,10 +87,20 @@ export function LearnView({
   const isCurrentPosition = viewedPath === checkpoint.pathKey;
   const displayFen =
     isCurrentPosition && boardFen ? boardFen : (node?.fen ?? "");
+  const userToMove =
+    !node ||
+    checkpoint.sideMode === "both" ||
+    sideToMove(node.fen) === checkpoint.side;
 
   useEffect(() => {
+    setAutoContinue(
+      normalizeLearnAutoContinue(
+        window.localStorage.getItem(LEARN_AUTO_CONTINUE_KEY),
+      ),
+    );
     return () => {
       if (opponentTimer.current) clearTimeout(opponentTimer.current);
+      if (autoContinueTimer.current) clearTimeout(autoContinueTimer.current);
     };
   }, []);
 
@@ -97,6 +120,10 @@ export function LearnView({
 
   function continueTraining() {
     clearOpponentTimer();
+    if (autoContinueTimer.current) {
+      clearTimeout(autoContinueTimer.current);
+      autoContinueTimer.current = null;
+    }
     if (pendingCheckpoint) {
       setCheckpoint(pendingCheckpoint);
       setPendingCheckpoint(null);
@@ -106,12 +133,49 @@ export function LearnView({
     setFeedback(null);
   }
 
+  function selectBranch(uci: string) {
+    if (pending || pendingCheckpoint || !isCurrentPosition || !node) return;
+    clearOpponentTimer();
+    setFeedback(null);
+    startTransition(async () => {
+      try {
+        const result = await selectLearnBranchAction({
+          sessionId,
+          pathKey: checkpoint.pathKey,
+          uci,
+        });
+        const next = applyResolvedMoveCheckpoint(
+          result.checkpoint,
+          parseLearnCheckpoint,
+        );
+        play("move");
+        setCheckpoint(next);
+        setHistoryIndex(null);
+        setBoardFen(null);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : toastCopy.serverError;
+        toast.error(message);
+        setFeedback({
+          kind: "error",
+          description: message,
+          animate: true,
+        });
+      }
+    });
+  }
+
   function submitMove(uci: string, animate = true) {
     if (pending || pendingCheckpoint || !isCurrentPosition || !node) return;
+    if (!userToMove) {
+      selectBranch(uci);
+      return;
+    }
     clearOpponentTimer();
     setFeedback(null);
     const movedFen = applyUciToFen(node.fen, uci);
     if (movedFen) setBoardFen(movedFen);
+    play("move");
 
     startTransition(async () => {
       try {
@@ -126,6 +190,7 @@ export function LearnView({
             parseLearnCheckpoint,
           );
           setPendingCheckpoint(next);
+          play("correct");
           setFeedback({ kind: "correct", animate });
 
           const resolvedChapter = chapters.find(
@@ -134,11 +199,7 @@ export function LearnView({
           const resolvedNode = resolvedChapter
             ? findNode(resolvedChapter.root, next.pathKey)
             : null;
-          if (
-            resolvedNode &&
-            movedFen &&
-            resolvedNode.fen !== movedFen
-          ) {
+          if (resolvedNode && movedFen && resolvedNode.fen !== movedFen) {
             const delay = reduceMotion ? 0 : OPPONENT_FOLLOW_MS;
             opponentTimer.current = setTimeout(() => {
               setBoardFen(resolvedNode.fen);
@@ -146,7 +207,19 @@ export function LearnView({
           } else if (resolvedNode) {
             setBoardFen(resolvedNode.fen);
           }
+
+          if (autoContinue) {
+            const continueDelay = reduceMotion ? 0 : 450;
+            autoContinueTimer.current = setTimeout(() => {
+              setCheckpoint(next);
+              setPendingCheckpoint(null);
+              setHistoryIndex(null);
+              setBoardFen(null);
+              setFeedback(null);
+            }, continueDelay);
+          }
         } else {
+          play("incorrect");
           setFeedback({
             kind: "incorrect",
             description: "Try another branch from this position.",
@@ -204,9 +277,11 @@ export function LearnView({
   });
 
   const progressLabel = useMemo(() => {
-    const moveNumber = Math.floor((node?.ply ?? 0) / 2) + 1;
-    return `Chapter ${checkpoint.chapterIndex + 1} · move ${moveNumber}`;
-  }, [checkpoint.chapterIndex, node?.ply]);
+    return formatPathLabel(checkpoint.pathKey, {
+      chapterTitle: chapter?.title,
+      chapter,
+    });
+  }, [checkpoint.pathKey, chapter]);
 
   if (!chapter || !node) {
     return (
@@ -323,7 +398,9 @@ export function LearnView({
         !feedback ? (
           <Card size="sm">
             <CardHeader>
-              <CardTitle>Choose a branch</CardTitle>
+              <CardTitle>
+                {userToMove ? "Choose a branch" : "Opponent replies"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {node.children.map((child) =>
@@ -333,7 +410,11 @@ export function LearnView({
                     type="button"
                     variant="outline"
                     disabled={pending}
-                    onClick={() => submitMove(child.uci!)}
+                    onClick={() =>
+                      userToMove
+                        ? submitMove(child.uci!)
+                        : selectBranch(child.uci!)
+                    }
                   >
                     {child.san}
                   </Button>
@@ -343,7 +424,9 @@ export function LearnView({
           </Card>
         ) : null}
 
-        {displayFen ? <AnalysisPanel fen={displayFen} /> : null}
+        {displayFen ? (
+          <LazyAnalysisPanel fen={displayFen} color={checkpoint.side} />
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           {pending ? (
@@ -362,6 +445,26 @@ export function LearnView({
               Retry
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant={autoContinue ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={autoContinue}
+            onClick={() => {
+              const next = !autoContinue;
+              setAutoContinue(next);
+              try {
+                window.localStorage.setItem(
+                  LEARN_AUTO_CONTINUE_KEY,
+                  next ? "true" : "false",
+                );
+              } catch {
+                // ignore
+              }
+            }}
+          >
+            Auto-continue {autoContinue ? "on" : "off"}
+          </Button>
           <Button
             type="button"
             variant="ghost"

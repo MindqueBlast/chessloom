@@ -52,6 +52,7 @@ describe("practice training", () => {
       index: 0,
       revealed: false,
       side: "black",
+      sideMode: "black",
       status: "active",
     });
   });
@@ -61,12 +62,15 @@ describe("practice training", () => {
     const state = startPractice(cards, "random", rng);
 
     expect(state.side).toBe("white");
+    expect(state.sideMode).toBe("random");
     expect(state.queue).toEqual([cards[0]]);
     expect(rng).toHaveBeenCalledTimes(1);
   });
 
   it("keeps every card in both mode", () => {
-    expect(startPractice(cards, "both").queue).toEqual(cards);
+    const state = startPractice(cards, "both");
+    expect(state.queue).toEqual(cards);
+    expect(state.sideMode).toBe("both");
   });
 
   it("starts complete when no cards match", () => {

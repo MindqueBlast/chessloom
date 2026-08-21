@@ -87,9 +87,32 @@ export function learnAutoOpponentIfNeeded(
     return state;
   }
 
+  // Multiple opponent replies: leave choice to the UI instead of forcing mainline.
+  if (node.children.length > 1) {
+    return state;
+  }
+
   const mainline = node.children[0];
   if (!mainline) {
     return state;
   }
   return advance(state, mainline);
+}
+
+/** Advance to a specific child (user or opponent branch chooser). */
+export function learnSelectChild(
+  state: LearnState,
+  chapter: ChapterTree,
+  move: { san?: string; uci?: string },
+): LearnState {
+  const node = currentNode(state, chapter);
+  const child = node.children.find((entry) => {
+    if (move.uci && entry.uci === move.uci) return true;
+    if (move.san && entry.san === move.san) return true;
+    return false;
+  });
+  if (!child) {
+    throw new Error("Selected branch is not in the repertoire");
+  }
+  return advance(state, child);
 }

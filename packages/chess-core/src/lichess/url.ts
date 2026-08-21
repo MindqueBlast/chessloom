@@ -28,3 +28,17 @@ export function parseLichessStudyUrl(input: string): {
     canonicalUrl: `https://lichess.org/study/${studyId}`,
   };
 }
+
+/** Deep-link the current FEN into Lichess play-vs-computer. */
+export function buildLichessPlayAiUrl(
+  fen: string,
+  color?: "white" | "black",
+): string {
+  const params = new URLSearchParams();
+  params.set("fen", fen);
+  if (color) {
+    params.set("color", color);
+  }
+  return `https://lichess.org/?${params.toString()}#ai`;
+}
+

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
+  formatPathSan,
   parsePracticeCheckpoint,
   type PracticeState,
 } from "@chessloom/chess-core";
@@ -13,15 +14,24 @@ import {
   Eye,
   LoaderCircle,
   RotateCcw,
+  Target,
 } from "lucide-react";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
-import { AnalysisPanel } from "@/components/engine/AnalysisPanel";
+import { LazyAnalysisPanel } from "@/components/engine/LazyAnalysisPanel";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import {
   revealPracticeExpectedAction,
   submitPracticeMoveAction,
 } from "@/lib/actions/training";
+import { useSound } from "@/lib/sound/useSound";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
 import { applyUciToFen, shortcutForKey } from "@/lib/training/ui";
@@ -33,11 +43,14 @@ export function PracticeView({
   studyId,
   sessionId,
   initialCheckpoint,
+  sessionNotice,
 }: {
   studyId: string;
   sessionId: string;
   initialCheckpoint: PracticeState;
+  sessionNotice?: "fresh" | "resumed";
 }) {
+  const { play } = useSound();
   const [checkpoint, setCheckpoint] = useState(initialCheckpoint);
   const [pendingCheckpoint, setPendingCheckpoint] =
     useState<PracticeState | null>(null);
@@ -54,10 +67,19 @@ export function PracticeView({
   const viewedCard = checkpoint.queue[viewedIndex] ?? currentCard;
   const isCurrentPosition = viewedIndex === checkpoint.index;
   const announcedComplete = useRef(initialCheckpoint.status === "complete");
+  const noticed = useRef(false);
   const displayFen =
     isCurrentPosition && boardFen
       ? boardFen
       : (viewedCard?.fen ?? currentCard?.fen ?? "");
+
+  useEffect(() => {
+    if (noticed.current || !sessionNotice) return;
+    noticed.current = true;
+    toast.message(
+      sessionNotice === "resumed" ? "Resumed your session" : "Started fresh",
+    );
+  }, [sessionNotice]);
 
   useEffect(() => {
     const complete =
@@ -67,8 +89,9 @@ export function PracticeView({
       return;
     }
     announcedComplete.current = true;
+    play("sessionComplete");
     toast.success(toastCopy.reviewCompleted);
-  }, [checkpoint.status, pendingCheckpoint]);
+  }, [checkpoint.status, pendingCheckpoint, play]);
 
   function retry() {
     setFeedback(null);
@@ -94,6 +117,7 @@ export function PracticeView({
     setExpected([]);
     const movedFen = applyUciToFen(currentCard.fen, uci);
     if (movedFen) setBoardFen(movedFen);
+    play("move");
 
     startTransition(async () => {
       try {
@@ -109,8 +133,10 @@ export function PracticeView({
               parsePracticeCheckpoint,
             ),
           );
+          play("correct");
           setFeedback({ kind: "correct", animate });
         } else {
+          play("incorrect");
           setFeedback({ kind: "incorrect", animate });
         }
       } catch (error) {
@@ -133,6 +159,7 @@ export function PracticeView({
           currentCard.pathKey,
         );
         setExpected(result.sans);
+        play("reveal");
         setFeedback({ kind: "incorrect", animate });
       } catch (error) {
         const message =
@@ -175,6 +202,48 @@ export function PracticeView({
       : undefined;
 
   if (checkpoint.status === "complete" && !pendingCheckpoint) {
+    if (checkpoint.queue.length === 0) {
+      return (
+        <Empty className="mx-auto max-w-lg border border-dashed py-16">
+          <EmptyHeader>
+            <EmptyTitle>Nothing due yet</EmptyTitle>
+            <EmptyDescription>
+              Your due queue is clear. Study ahead on weak or new positions, or
+              switch side.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link
+                  href={trainingPath(studyId, "practice", {
+                    sideMode: checkpoint.sideMode,
+                    fresh: true,
+                    queueMode: "study_ahead",
+                  })}
+                >
+                  <Target />
+                  Study ahead (weak/new)
+                </Link>
+              </Button>
+              {SESSION_SIDE_MODES.map((option) => (
+                <Button key={option.value} asChild size="sm" variant="outline">
+                  <Link
+                    href={trainingPath(studyId, "practice", {
+                      sideMode: option.value,
+                      fresh: true,
+                    })}
+                  >
+                    {option.label}
+                  </Link>
+                </Button>
+              ))}
+            </div>
+          </EmptyContent>
+        </Empty>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-xl py-20">
         <FeedbackBanner
@@ -188,28 +257,30 @@ export function PracticeView({
 
   if (!currentCard || !viewedCard) {
     return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {SESSION_SIDE_MODES.map((option) => (
-            <Button key={option.value} asChild size="sm" variant="outline">
-              <Link
-                href={trainingPath(studyId, "practice", {
-                  sideMode: option.value,
-                  fresh: true,
-                })}
-              >
-                {option.label}
-              </Link>
-            </Button>
-          ))}
-        </div>
-        <FeedbackBanner
-          kind="info"
-          title="Nothing due yet."
-          description="This study has no positions for your selected side."
-          animate={false}
-        />
-      </div>
+      <Empty className="mx-auto max-w-lg border border-dashed py-16">
+        <EmptyHeader>
+          <EmptyTitle>Nothing to practice</EmptyTitle>
+          <EmptyDescription>
+            This study has no positions for your selected side.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <div className="flex flex-wrap justify-center gap-2">
+            {SESSION_SIDE_MODES.map((option) => (
+              <Button key={option.value} asChild size="sm" variant="outline">
+                <Link
+                  href={trainingPath(studyId, "practice", {
+                    sideMode: option.value,
+                    fresh: true,
+                  })}
+                >
+                  {option.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
+        </EmptyContent>
+      </Empty>
     );
   }
 
@@ -236,7 +307,7 @@ export function PracticeView({
             Practice
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Find a move from your repertoire.
+            {formatPathSan(currentCard.pathKey)}
           </p>
         </div>
 
@@ -247,7 +318,7 @@ export function PracticeView({
               asChild
               size="sm"
               variant={
-                option.value === checkpoint.side ? "default" : "outline"
+                option.value === checkpoint.sideMode ? "default" : "outline"
               }
             >
               <Link
@@ -268,7 +339,9 @@ export function PracticeView({
           animate={feedback?.animate}
         />
 
-        {displayFen ? <AnalysisPanel fen={displayFen} /> : null}
+        {displayFen ? (
+          <LazyAnalysisPanel fen={displayFen} color={checkpoint.side} />
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           {pending ? (

@@ -23,14 +23,14 @@ describe("training analysis isolation", () => {
     expect(source).not.toMatch(/lib\/actions\/training/);
   });
 
-  it("training views mount AnalysisPanel with displayFen only", () => {
+  it("training views mount LazyAnalysisPanel with displayFen", () => {
     for (const view of ["LearnView", "PracticeView", "TestView"]) {
       const source = readFileSync(
         join(webRoot, `components/training/${view}.tsx`),
         "utf8",
       );
-      expect(source).toContain("AnalysisPanel");
-      expect(source).toMatch(/<AnalysisPanel fen=\{displayFen\}/);
+      expect(source).toContain("LazyAnalysisPanel");
+      expect(source).toMatch(/<LazyAnalysisPanel fen=\{displayFen\}/);
     }
   });
 });
