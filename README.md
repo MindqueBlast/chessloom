@@ -4,7 +4,7 @@ Chess opening trainer. Import a PGN repertoire, then Learn and Practice it with 
 
 This is a [pnpm](https://pnpm.io/) workspace:
 
-- `packages/chess-core` — shared tree types, PGN parsing, Learn/Practice, and SRS
+- `packages/chess-core` — shared tree types, PGN parsing, Learn/Practice, and FSRS scheduling
 - `apps/web` — Next.js app (App Router) with Supabase auth, storage, and training UI
 
 ## Prerequisites
@@ -102,7 +102,7 @@ Google OAuth client ID and secret are configured in the Supabase dashboard, not 
 
 The schema creates owner-scoped RLS policies and a private `pgns` Storage bucket. Store uploads beneath a user-owned path such as `<auth-user-id>/<file-name>.pgn`.
 
-`position_progress` and training checkpoints are read-only to authenticated clients. After user-scoped authentication and move validation, training server actions use the server-only service client to call `apply_training_result_and_checkpoint`. The RPC commits the scheduler result and checkpoint atomically; no browser or server-action input may provide mastery counters.
+`position_progress` and training checkpoints are read-only to authenticated clients. After user-scoped authentication and move validation, training server actions score attempts with **FSRS** in TypeScript (`createFsrsScheduler`), then use the server-only service client to call `apply_training_result_and_checkpoint`. The RPC persists the computed progress fields and checkpoint atomically; no browser or server-action input may provide mastery counters or FSRS card state.
 
 ### Google OAuth
 

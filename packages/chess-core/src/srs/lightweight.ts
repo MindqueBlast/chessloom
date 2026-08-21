@@ -27,6 +27,7 @@ function intervalForMastery(
   return intervalsMsByBand[Math.min(band, intervalsMsByBand.length - 1)]!;
 }
 
+/** @deprecated Use `createInitialFsrsProgress` instead. */
 export function createInitialProgress(
   pathKey: PathKey,
   now = new Date(),
