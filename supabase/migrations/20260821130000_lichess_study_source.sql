@@ -198,8 +198,8 @@ begin
   set source_type = p_source_type,
       pgn_text = p_pgn_text,
       pgn_storage_path = p_storage_path,
-      lichess_study_id = p_lichess_study_id,
-      lichess_study_url = p_lichess_study_url
+      lichess_study_id = coalesce(p_lichess_study_id, lichess_study_id),
+      lichess_study_url = coalesce(p_lichess_study_url, lichess_study_url)
   where id = p_study_id
     and user_id = (select auth.uid());
 

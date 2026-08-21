@@ -93,5 +93,11 @@ describe("reimport_study migration", () => {
     expect(lichessSource).toMatch(
       /grant execute on function public\.reimport_study\([\s\S]+to authenticated/,
     );
+    expect(lichessSource).toContain(
+      "lichess_study_id = coalesce(p_lichess_study_id, lichess_study_id)",
+    );
+    expect(lichessSource).toContain(
+      "lichess_study_url = coalesce(p_lichess_study_url, lichess_study_url)",
+    );
   });
 });
