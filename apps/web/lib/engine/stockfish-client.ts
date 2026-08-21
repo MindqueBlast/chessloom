@@ -120,12 +120,13 @@ export function createStockfishClient(options: StockfishClientOptions = {}): {
     }
 
     worker = createWorker(workerUrl);
+    const activeWorker = worker;
     worker.onmessage = handleMessage;
     initStep = "uci";
     readyPromise = new Promise((resolve, reject) => {
       readyResolve = resolve;
-      worker?.postMessage("uci");
-      worker.onerror = () => {
+      activeWorker.postMessage("uci");
+      activeWorker.onerror = () => {
         reject(new Error("Stockfish worker failed to start"));
       };
     });

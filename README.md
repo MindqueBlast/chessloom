@@ -54,6 +54,12 @@ pnpm build
 
 Runtime (`pnpm dev`, Vercel) still needs real keys.
 
+## Optional engine analysis
+
+Learn, Practice, and Test include an optional **Analysis** panel powered by in-browser Stockfish (WASM). It is **off by default** — turn on **Show engine eval** to load the engine and see an eval bar plus principal variation for the position on the board.
+
+Engine output is **non-authoritative reference only**. It never grades moves, changes training feedback, or writes progress. Learn, Practice, and Test scoring stay **server-authoritative** via FSRS; the engine cannot override or replace that.
+
 ## Import
 
 Sign in, then open **Import** (`/import`) to create a study from one of three sources:
