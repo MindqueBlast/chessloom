@@ -40,7 +40,7 @@ function progressToCard(progress: PositionProgress): Card {
     scheduled_days: progress.fsrsScheduledDays,
     reps: progress.fsrsReps,
     lapses: progress.fsrsLapses,
-    learning_steps: 0,
+    learning_steps: progress.fsrsLearningSteps,
     state: progress.fsrsState as State,
     last_review: progress.fsrsLastReview
       ? new Date(progress.fsrsLastReview)
@@ -57,6 +57,7 @@ function cardFieldsFromCard(card: Card): Pick<
   | "fsrsScheduledDays"
   | "fsrsReps"
   | "fsrsLapses"
+  | "fsrsLearningSteps"
   | "fsrsState"
   | "fsrsLastReview"
 > {
@@ -68,6 +69,7 @@ function cardFieldsFromCard(card: Card): Pick<
     fsrsScheduledDays: card.scheduled_days,
     fsrsReps: card.reps,
     fsrsLapses: card.lapses,
+    fsrsLearningSteps: card.learning_steps,
     fsrsState: card.state,
     fsrsLastReview: card.last_review?.toISOString() ?? null,
   };

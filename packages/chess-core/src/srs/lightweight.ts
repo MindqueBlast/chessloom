@@ -34,6 +34,7 @@ export function createInitialProgress(
   return createInitialFsrsProgress(pathKey, now);
 }
 
+/** @deprecated Use `createFsrsScheduler` instead. */
 export function createLightweightScheduler(
   config: Partial<LightweightConfig> = {},
 ): MasteryScheduler {

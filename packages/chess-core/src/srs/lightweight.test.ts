@@ -23,6 +23,7 @@ describe("createInitialProgress", () => {
       fsrsScheduledDays: 0,
       fsrsReps: 0,
       fsrsLapses: 0,
+      fsrsLearningSteps: 0,
       fsrsState: 0,
       fsrsLastReview: null,
     });

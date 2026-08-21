@@ -44,6 +44,7 @@ export interface PositionProgress {
   fsrsScheduledDays: number;
   fsrsReps: number;
   fsrsLapses: number;
+  fsrsLearningSteps: number;
   fsrsState: number;
   fsrsLastReview: string | null;
 }

@@ -28,6 +28,7 @@ function lightweightProgress(
     fsrsScheduledDays: 0,
     fsrsReps: 0,
     fsrsLapses: 0,
+    fsrsLearningSteps: 0,
     fsrsState: State.New,
     fsrsLastReview: null,
     ...overrides,
@@ -52,6 +53,7 @@ describe("createInitialFsrsProgress", () => {
       fsrsScheduledDays: 0,
       fsrsReps: 0,
       fsrsLapses: 0,
+      fsrsLearningSteps: 0,
       fsrsState: State.New,
       fsrsLastReview: null,
     });
@@ -59,6 +61,21 @@ describe("createInitialFsrsProgress", () => {
 });
 
 describe("createFsrsScheduler", () => {
+  it("graduates a new card to review after two consecutive correct answers", () => {
+    const scheduler = createFsrsScheduler();
+    const progress = createInitialFsrsProgress("c0:e2e4", NOW);
+    const LEARNING_STEP_MS = 10 * 60 * 1000;
+
+    const afterFirst = scheduler.onCorrect(progress, NOW);
+    const afterSecond = scheduler.onCorrect(afterFirst, NOW);
+
+    expect(afterSecond.fsrsState).toBe(State.Review);
+    expect(
+      new Date(afterSecond.nextReviewAt).getTime() - NOW.getTime(),
+    ).toBeGreaterThan(LEARNING_STEP_MS);
+    expect(afterSecond.fsrsScheduledDays).toBeGreaterThan(0);
+  });
+
   it("schedules correct answers later and raises mastery", () => {
     const scheduler = createFsrsScheduler();
     const progress = createInitialFsrsProgress("c0:e2e4", NOW);
