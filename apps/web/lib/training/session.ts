@@ -2,10 +2,12 @@ import {
   findNodeByPathKey,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
+  parseTestCheckpoint,
   serializeCheckpoint,
   type ChapterTree,
   type LearnState,
   type PracticeState,
+  type TestState,
 } from "@chessloom/chess-core";
 
 import { SESSION_TTL_MS } from "../actions/training-helpers";
@@ -76,6 +78,33 @@ export function resumablePracticeCheckpoint(
   try {
     const state = parsePracticeCheckpoint(serializeCheckpoint(checkpoint));
     return isPracticeCheckpointRestorable(state, chapters) ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isTestCheckpointRestorable(
+  state: TestState,
+  chapters: ChapterTree[],
+): boolean {
+  return state.queue.every((card) => {
+    const match = /^c(\d+):/.exec(card.pathKey);
+    const chapter = match
+      ? chapters.find((candidate) => candidate.index === Number(match[1]))
+      : undefined;
+    return chapter
+      ? findNodeByPathKey(chapter, card.pathKey)?.fen === card.fen
+      : false;
+  });
+}
+
+export function resumableTestCheckpoint(
+  checkpoint: unknown,
+  chapters: ChapterTree[],
+): TestState | null {
+  try {
+    const state = parseTestCheckpoint(serializeCheckpoint(checkpoint));
+    return isTestCheckpointRestorable(state, chapters) ? state : null;
   } catch {
     return null;
   }

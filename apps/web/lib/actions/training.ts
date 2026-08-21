@@ -31,6 +31,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   resumableLearnCheckpoint,
   resumablePracticeCheckpoint,
+  resumableTestCheckpoint,
 } from "../training/session";
 
 import {
@@ -714,7 +715,11 @@ export async function resumeSessionAction(
   const checkpoint =
     mode === "learn"
       ? resumableLearnCheckpoint(session.checkpoint, chapters)
-      : resumablePracticeCheckpoint(session.checkpoint, chapters);
+      : mode === "practice"
+        ? resumablePracticeCheckpoint(session.checkpoint, chapters)
+        : mode === "random_test" || mode === "full_test"
+          ? resumableTestCheckpoint(session.checkpoint, chapters)
+          : null;
   if (!checkpoint) {
     await abandonSession(session);
     return null;
