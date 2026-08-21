@@ -47,10 +47,8 @@ export function StudyOverview({
   chapters: ChapterSummary[];
 }) {
   const [sideMode, setSideMode] = useState<SideMode>(defaultSideMode);
-  const sideQuery =
-    sideMode === defaultSideMode && sideMode !== "random"
-      ? undefined
-      : sideMode;
+  // DefaultSideMode never includes "random", so equality alone decides the query.
+  const sideQuery = sideMode === defaultSideMode ? undefined : sideMode;
   const forceFresh = sideMode === "random" || sideMode !== defaultSideMode;
 
   return (
