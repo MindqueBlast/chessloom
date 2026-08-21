@@ -7,10 +7,35 @@ import {
   normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
   progressFromRow,
+  progressFromRowMigrating,
   progressToRow,
   resolveLearnChapter,
   trainingResultRpcPayload,
+  type ProgressRow,
 } from "./training-helpers";
+
+const defaultFsrsRow = {
+  fsrs_stability: 0,
+  fsrs_difficulty: 0,
+  fsrs_elapsed_days: 0,
+  fsrs_scheduled_days: 0,
+  fsrs_reps: 0,
+  fsrs_lapses: 0,
+  fsrs_state: 0,
+  fsrs_learning_steps: 0,
+  fsrs_last_review: null,
+} satisfies Pick<
+  ProgressRow,
+  | "fsrs_stability"
+  | "fsrs_difficulty"
+  | "fsrs_elapsed_days"
+  | "fsrs_scheduled_days"
+  | "fsrs_reps"
+  | "fsrs_lapses"
+  | "fsrs_state"
+  | "fsrs_learning_steps"
+  | "fsrs_last_review"
+>;
 
 const chapters = [
   {
@@ -141,14 +166,24 @@ describe("assertSessionUsable", () => {
 
 describe("progress row mapping", () => {
   it("maps scheduler fields without accepting client-shaped values", () => {
-    const progress = progressFromRow("c0:", {
+    const row: ProgressRow = {
       attempts: 3,
       correct_count: 2,
       streak: 1,
       mastery: 24,
       last_reviewed_at: "2026-08-20T10:00:00.000Z",
       due_at: "2026-08-21T10:00:00.000Z",
-    });
+      fsrs_stability: 7,
+      fsrs_difficulty: 5.2,
+      fsrs_elapsed_days: 1,
+      fsrs_scheduled_days: 3,
+      fsrs_reps: 2,
+      fsrs_lapses: 1,
+      fsrs_state: 2,
+      fsrs_learning_steps: 0,
+      fsrs_last_review: "2026-08-20T10:00:00.000Z",
+    };
+    const progress = progressFromRow("c0:", row);
 
     expect(progress).toEqual({
       pathKey: "c0:",
@@ -158,27 +193,65 @@ describe("progress row mapping", () => {
       mastery: 24,
       lastReviewedAt: "2026-08-20T10:00:00.000Z",
       nextReviewAt: "2026-08-21T10:00:00.000Z",
+      fsrsStability: 7,
+      fsrsDifficulty: 5.2,
+      fsrsElapsedDays: 1,
+      fsrsScheduledDays: 3,
+      fsrsReps: 2,
+      fsrsLapses: 1,
+      fsrsState: 2,
+      fsrsLearningSteps: 0,
+      fsrsLastReview: "2026-08-20T10:00:00.000Z",
     });
-    expect(progressToRow(progress)).toEqual({
-      attempts: 3,
-      correct_count: 2,
-      streak: 1,
-      mastery: 24,
+    expect(progressToRow(progress)).toEqual(row);
+  });
+
+  it("migrates legacy lightweight rows on read", () => {
+    const row: ProgressRow = {
+      attempts: 5,
+      correct_count: 4,
+      streak: 2,
+      mastery: 40,
       last_reviewed_at: "2026-08-20T10:00:00.000Z",
       due_at: "2026-08-21T10:00:00.000Z",
-    });
+      ...defaultFsrsRow,
+    };
+    const now = new Date("2026-08-20T12:00:00.000Z");
+    const migrated = progressFromRowMigrating("c0:e2e4", row, now);
+
+    expect(migrated.fsrsStability).toBeGreaterThan(0);
+    expect(migrated.fsrsState).toBe(2);
+    expect(migrated.nextReviewAt).toBe(row.due_at);
   });
 });
 
 describe("trainingResultRpcPayload", () => {
-  it("sends only server-derived result and checkpoint fields", () => {
+  it("sends FSRS-authored progress and checkpoint fields", () => {
     const checkpoint = { pathKey: "c0:e2e4", status: "active" };
+    const progress: ProgressRow = {
+      attempts: 1,
+      correct_count: 1,
+      streak: 1,
+      mastery: 90,
+      last_reviewed_at: "2026-08-20T12:00:00.000Z",
+      due_at: "2026-08-21T12:00:00.000Z",
+      fsrs_stability: 3.5,
+      fsrs_difficulty: 4.8,
+      fsrs_elapsed_days: 0,
+      fsrs_scheduled_days: 1,
+      fsrs_reps: 1,
+      fsrs_lapses: 0,
+      fsrs_state: 2,
+      fsrs_learning_steps: 0,
+      fsrs_last_review: "2026-08-20T12:00:00.000Z",
+    };
     const payload = trainingResultRpcPayload(
       "user-1",
       "session-1",
       "study-1",
       "c0:e2e4",
       true,
+      progress,
       checkpoint,
       "2026-08-20T12:00:00.000Z",
     );
@@ -189,6 +262,7 @@ describe("trainingResultRpcPayload", () => {
       p_study_id: "study-1",
       p_path_key: "c0:e2e4",
       p_correct: true,
+      p_progress: progress,
       p_checkpoint: checkpoint,
       p_expected_updated_at: "2026-08-20T12:00:00.000Z",
     });
@@ -377,6 +451,7 @@ describe("createInitialTrainingCheckpoint", () => {
           mastery: 64,
           last_reviewed_at: "2026-08-19T12:00:00.000Z",
           due_at: "2026-08-20T11:00:00.000Z",
+          ...defaultFsrsRow,
         },
         {
           path_key: "c0:e2e4",
@@ -386,6 +461,7 @@ describe("createInitialTrainingCheckpoint", () => {
           mastery: 12,
           last_reviewed_at: "2026-08-20T10:00:00.000Z",
           due_at: "2026-08-20T10:00:00.000Z",
+          ...defaultFsrsRow,
         },
       ], now),
     ).toMatchObject({
@@ -405,6 +481,7 @@ describe("createInitialTrainingCheckpoint", () => {
           mastery: 64,
           last_reviewed_at: "2026-08-20T12:00:00.000Z",
           due_at: "2026-08-21T12:00:00.000Z",
+          ...defaultFsrsRow,
         },
       ], now),
     ).toMatchObject({

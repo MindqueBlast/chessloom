@@ -1,7 +1,8 @@
 import {
-  createInitialProgress,
-  createLightweightScheduler,
+  createFsrsScheduler,
+  createInitialFsrsProgress,
   learnAutoOpponentIfNeeded,
+  migrateLightweightToFsrs,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
   serializeCheckpoint,
@@ -53,7 +54,19 @@ export type ProgressRow = {
   mastery: number;
   last_reviewed_at: string | null;
   due_at: string;
+  fsrs_stability: number;
+  fsrs_difficulty: number;
+  fsrs_elapsed_days: number;
+  fsrs_scheduled_days: number;
+  fsrs_reps: number;
+  fsrs_lapses: number;
+  fsrs_state: number;
+  fsrs_learning_steps: number;
+  fsrs_last_review: string | null;
 };
+
+export const PROGRESS_ROW_SELECT =
+  "attempts,correct_count,streak,mastery,last_reviewed_at,due_at,fsrs_stability,fsrs_difficulty,fsrs_elapsed_days,fsrs_scheduled_days,fsrs_reps,fsrs_lapses,fsrs_state,fsrs_learning_steps,fsrs_last_review";
 
 export type PracticeProgressRow = ProgressRow & {
   path_key: string;
@@ -188,6 +201,7 @@ export function trainingResultRpcPayload(
   studyId: string,
   pathKey: string,
   correct: boolean,
+  progress: ProgressRow,
   checkpoint: unknown,
   expectedUpdatedAt: string,
 ): {
@@ -196,6 +210,7 @@ export function trainingResultRpcPayload(
   p_study_id: string;
   p_path_key: string;
   p_correct: boolean;
+  p_progress: ProgressRow;
   p_checkpoint: unknown;
   p_expected_updated_at: string;
 } {
@@ -208,6 +223,7 @@ export function trainingResultRpcPayload(
     p_study_id: studyId,
     p_path_key: pathKey,
     p_correct: correct,
+    p_progress: progress,
     p_checkpoint: checkpoint,
     p_expected_updated_at: expectedUpdatedAt,
   };
@@ -383,10 +399,10 @@ export function buildPracticeQueue(
   const progressByPath = new Map(
     progressRows.map((row) => [
       row.path_key,
-      progressFromRow(row.path_key, row),
+      progressFromRowMigrating(row.path_key, row, now),
     ]),
   );
-  const scheduler = createLightweightScheduler();
+  const scheduler = createFsrsScheduler();
   const nowIso = now.toISOString();
 
   return cards
@@ -394,7 +410,7 @@ export function buildPracticeQueue(
       card,
       progress:
         progressByPath.get(card.pathKey) ??
-        createInitialProgress(card.pathKey, now),
+        createInitialFsrsProgress(card.pathKey, now),
     }))
     .filter(({ progress }) => progress.nextReviewAt <= nowIso)
     .sort((a, b) => scheduler.compareDue(a.progress, b.progress))
@@ -423,6 +439,12 @@ export function assertSessionUsable(
   }
 }
 
+function needsFsrsMigration(row: ProgressRow): boolean {
+  const isDefaultNewFsrs = row.fsrs_stability === 0 && row.fsrs_state === 0;
+  const hasLegacyActivity = row.mastery > 0 || row.last_reviewed_at !== null;
+  return isDefaultNewFsrs && hasLegacyActivity;
+}
+
 export function progressFromRow(
   pathKey: string,
   row: ProgressRow,
@@ -435,7 +457,28 @@ export function progressFromRow(
     mastery: row.mastery,
     lastReviewedAt: row.last_reviewed_at,
     nextReviewAt: row.due_at,
+    fsrsStability: row.fsrs_stability,
+    fsrsDifficulty: row.fsrs_difficulty,
+    fsrsElapsedDays: row.fsrs_elapsed_days,
+    fsrsScheduledDays: row.fsrs_scheduled_days,
+    fsrsReps: row.fsrs_reps,
+    fsrsLapses: row.fsrs_lapses,
+    fsrsState: row.fsrs_state,
+    fsrsLearningSteps: row.fsrs_learning_steps,
+    fsrsLastReview: row.fsrs_last_review,
   };
+}
+
+export function progressFromRowMigrating(
+  pathKey: string,
+  row: ProgressRow,
+  now = new Date(),
+): PositionProgress {
+  const progress = progressFromRow(pathKey, row);
+  if (needsFsrsMigration(row)) {
+    return migrateLightweightToFsrs(progress, now);
+  }
+  return progress;
 }
 
 export function progressToRow(progress: PositionProgress): ProgressRow {
@@ -446,5 +489,14 @@ export function progressToRow(progress: PositionProgress): ProgressRow {
     mastery: progress.mastery,
     last_reviewed_at: progress.lastReviewedAt,
     due_at: progress.nextReviewAt,
+    fsrs_stability: progress.fsrsStability,
+    fsrs_difficulty: progress.fsrsDifficulty,
+    fsrs_elapsed_days: progress.fsrsElapsedDays,
+    fsrs_scheduled_days: progress.fsrsScheduledDays,
+    fsrs_reps: progress.fsrsReps,
+    fsrs_lapses: progress.fsrsLapses,
+    fsrs_state: progress.fsrsState,
+    fsrs_learning_steps: progress.fsrsLearningSteps,
+    fsrs_last_review: progress.fsrsLastReview,
   };
 }

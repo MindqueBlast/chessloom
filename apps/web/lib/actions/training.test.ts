@@ -130,21 +130,26 @@ function clientFixture() {
       }
       rpcPayload = values;
       savedCheckpoint = values.p_checkpoint;
+      const progress = values.p_progress as Row;
       return {
-        data: {
-          attempts: 1,
-          correct_count: values.p_correct ? 1 : 0,
-          streak: values.p_correct ? 1 : 0,
-          mastery: values.p_correct ? 8 : 0,
-          last_reviewed_at: "2026-08-20T12:30:00.000Z",
-          due_at: values.p_correct
-            ? "2026-08-21T12:30:00.000Z"
-            : "2026-08-20T13:30:00.000Z",
-        },
+        data: progress,
         error: null,
       };
     }),
     from: vi.fn((table: string) => {
+      if (table === "position_progress") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+                })),
+              })),
+            })),
+          })),
+        };
+      }
       if (table !== "training_sessions") {
         throw new Error(`Unexpected service table ${table}`);
       }
@@ -189,22 +194,43 @@ describe("authoritative practice actions", () => {
     expect(result).toMatchObject({
       ok: false,
       expectedCount: 1,
-      progress: { attempts: 1, correctCount: 0, mastery: 0 },
+      progress: {
+        attempts: 1,
+        correctCount: 0,
+        streak: 0,
+      },
     });
     expect(JSON.stringify(result)).not.toContain("e4");
-    expect(fixture.getRpcPayload()).toEqual({
+    const payload = fixture.getRpcPayload();
+    expect(payload).toEqual({
       p_user_id: "user-1",
       p_session_id: "session-1",
       p_study_id: "study-1",
       p_path_key: "c0:",
       p_correct: false,
+      p_progress: expect.objectContaining({
+        attempts: 1,
+        correct_count: 0,
+        streak: 0,
+        due_at: expect.any(String),
+        fsrs_stability: expect.any(Number),
+        fsrs_difficulty: expect.any(Number),
+        fsrs_elapsed_days: expect.any(Number),
+        fsrs_scheduled_days: expect.any(Number),
+        fsrs_reps: expect.any(Number),
+        fsrs_lapses: expect.any(Number),
+        fsrs_state: expect.any(Number),
+        fsrs_learning_steps: expect.any(Number),
+        last_reviewed_at: "2026-08-20T12:30:00.000Z",
+        fsrs_last_review: "2026-08-20T12:30:00.000Z",
+      }),
       p_checkpoint: expect.objectContaining({
         index: 0,
         status: "active",
       }),
       p_expected_updated_at: "2026-08-20T12:00:00.000Z",
     });
-    expect(fixture.getRpcPayload()).not.toHaveProperty("p_mastery");
+    expect(payload).not.toHaveProperty("p_mastery");
   });
 
   it("rejects a path that is not the current checkpoint card", async () => {

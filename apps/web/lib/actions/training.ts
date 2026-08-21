@@ -1,6 +1,8 @@
 "use server";
 
 import {
+  createFsrsScheduler,
+  createInitialFsrsProgress,
   findNodeByPathKey,
   learnApplyUserMove,
   learnAutoOpponentIfNeeded,
@@ -32,6 +34,9 @@ import {
   normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
   progressFromRow,
+  progressFromRowMigrating,
+  progressToRow,
+  PROGRESS_ROW_SELECT,
   trainingResultRpcPayload,
   type ChapterRow,
   type NodeRow,
@@ -204,7 +209,29 @@ async function scorePositionAndSave(
     throw new Error("Training session is not owned by the current user");
   }
   const safeCheckpoint = jsonValue(checkpoint);
+  const now = new Date();
   const serviceClient = createServiceClient();
+  const { data: existingRow, error: loadError } = await serviceClient
+    .from("position_progress")
+    .select(PROGRESS_ROW_SELECT)
+    .eq("user_id", userId)
+    .eq("study_id", session.study_id)
+    .eq("path_key", pathKey)
+    .maybeSingle();
+
+  if (loadError) {
+    throw new Error(loadError.message);
+  }
+
+  const base = existingRow
+    ? progressFromRowMigrating(pathKey, existingRow as ProgressRow, now)
+    : createInitialFsrsProgress(pathKey, now);
+  const scheduler = createFsrsScheduler();
+  const next = correct
+    ? scheduler.onCorrect(base, now)
+    : scheduler.onIncorrect(base, now);
+  const progressRow = progressToRow(next);
+
   const { data, error } = await serviceClient.rpc(
     "apply_training_result_and_checkpoint",
     trainingResultRpcPayload(
@@ -213,6 +240,7 @@ async function scorePositionAndSave(
       session.study_id,
       pathKey,
       correct,
+      progressRow,
       safeCheckpoint,
       session.updated_at,
     ),
@@ -275,9 +303,7 @@ export async function startTrainingSessionAction(
     mode === "practice"
       ? client
           .from("position_progress")
-          .select(
-            "path_key,attempts,correct_count,streak,mastery,last_reviewed_at,due_at",
-          )
+          .select(`path_key,${PROGRESS_ROW_SELECT}`)
           .eq("study_id", studyId)
       : Promise.resolve({ data: [], error: null }),
   ]);
