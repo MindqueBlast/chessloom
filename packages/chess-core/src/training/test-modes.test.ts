@@ -162,6 +162,7 @@ function baseTestState(queue = cards): TestState {
     queue,
     index: 0,
     revealed: false,
+    pendingAdvance: false,
     side: "white",
     sideMode: "both",
     status: "active",
@@ -180,6 +181,8 @@ describe("test move grading", () => {
     expect(result.feedback).toEqual({ ok: false, expected: [e4] });
     expect(result.state).toMatchObject({
       index: 0,
+      revealed: false,
+      pendingAdvance: false,
       incorrectCount: 1,
       weakPathKeys: ["c0:"],
       status: "active",
@@ -213,13 +216,22 @@ describe("test move grading", () => {
 
   it("reveals and advances after an incorrect answer", () => {
     const incorrect = testApplyMove(baseTestState(), chapter, { san: "d4" }).state;
-    expect(testReveal(incorrect).revealed).toBe(true);
-    expect(testAdvance(incorrect)).toMatchObject({
+    const revealed = testReveal(incorrect);
+    expect(revealed).toMatchObject({ revealed: true, pendingAdvance: true });
+    expect(testAdvance(revealed)).toMatchObject({
       index: 1,
       revealed: false,
+      pendingAdvance: false,
       incorrectCount: 1,
       status: "active",
     });
+  });
+
+  it("rejects advance before the current card is resolved", () => {
+    const incorrect = testApplyMove(baseTestState(), chapter, { san: "d4" }).state;
+    expect(() => testAdvance(incorrect)).toThrow(
+      "Cannot advance until the current card is resolved",
+    );
   });
 
   it("completes after the final card", () => {
@@ -259,6 +271,7 @@ describe("test checkpoints", () => {
     queue: [card("c0:e2e4")],
     index: 0,
     revealed: false,
+    pendingAdvance: false,
     side: "white",
     sideMode: "both",
     status: "active",
@@ -276,7 +289,7 @@ describe("test checkpoints", () => {
     expect(() => parseTestCheckpoint("{")).toThrow("Invalid test checkpoint");
     expect(() =>
       parseTestCheckpoint(
-        '{"mode":"random_test","queue":[],"index":0,"revealed":false,"side":"white","sideMode":"both","status":"active","correctCount":0,"incorrectCount":0,"weakPathKeys":[]}',
+        '{"mode":"random_test","queue":[],"index":0,"revealed":false,"pendingAdvance":false,"side":"white","sideMode":"both","status":"active","correctCount":0,"incorrectCount":0,"weakPathKeys":[]}',
       ),
     ).not.toThrow();
     expect(() =>

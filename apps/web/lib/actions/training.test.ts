@@ -332,6 +332,7 @@ function testClientFixture() {
     queue: [{ pathKey: "c0:", fen: "root-fen" }],
     index: 0,
     revealed: false,
+    pendingAdvance: false,
     side: "white",
     sideMode: "both",
     status: "active",
@@ -555,7 +556,10 @@ describe("authoritative test actions", () => {
     await expect(
       revealTestExpectedAction("session-test", "c0:"),
     ).resolves.toEqual({ sans: ["e4"], ucis: ["e2e4"] });
-    expect(fixture.getSavedCheckpoint()).toMatchObject({ revealed: true });
+    expect(fixture.getSavedCheckpoint()).toMatchObject({
+      revealed: true,
+      pendingAdvance: true,
+    });
 
     const advanced = await advanceTestAction("session-test", "c0:");
     expect(advanced.summary).toEqual({
@@ -567,6 +571,26 @@ describe("authoritative test actions", () => {
     expect(fixture.getSavedCheckpoint()).toMatchObject({
       index: 1,
       status: "complete",
+    });
+  });
+
+  it("rejects advancing before the current card is resolved", async () => {
+    const fixture = testClientFixture();
+    createClient.mockResolvedValue(fixture.userClient);
+    createServiceClient.mockReturnValue(fixture.serviceClient);
+
+    await submitTestMoveAction({
+      sessionId: "session-test",
+      pathKey: "c0:",
+      uci: "d2d4",
+    });
+
+    await expect(advanceTestAction("session-test", "c0:")).rejects.toThrow(
+      "Cannot advance until the current card is resolved",
+    );
+    expect(fixture.getSavedCheckpoint()).toMatchObject({
+      index: 0,
+      pendingAdvance: false,
     });
   });
 

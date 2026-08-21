@@ -106,7 +106,7 @@ export function TestView({
   }
 
   function continueTest() {
-    if (!currentCard || pending || !awaitingAdvance) {
+    if (!currentCard || pending || !awaitingAdvance || expected.length === 0) {
       return;
     }
     startTransition(async () => {
@@ -194,7 +194,7 @@ export function TestView({
         setViewedIndex((index) => Math.min(checkpoint.index, index + 1));
       } else if (shortcut === "retry") {
         retry();
-      } else if (awaitingAdvance) {
+      } else if (awaitingAdvance && expected.length > 0) {
         continueTest();
       } else if (feedback?.kind === "incorrect" && expected.length === 0) {
         revealExpected(false);
@@ -336,11 +336,12 @@ export function TestView({
                   <Eye />
                   Show expected move(s)
                 </Button>
-              ) : null}
-              <Button type="button" onClick={continueTest}>
-                Continue
-                <ArrowRight />
-              </Button>
+              ) : (
+                <Button type="button" onClick={continueTest}>
+                  Continue
+                  <ArrowRight />
+                </Button>
+              )}
               <Button type="button" variant="outline" onClick={retry}>
                 <RotateCcw />
                 Retry

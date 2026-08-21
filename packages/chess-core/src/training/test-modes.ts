@@ -18,6 +18,7 @@ export interface TestState {
   queue: TestCard[];
   index: number;
   revealed: boolean;
+  pendingAdvance: boolean;
   side: TrainingSide;
   sideMode: "white" | "black" | "both";
   status: "active" | "complete";
@@ -143,6 +144,7 @@ function advanceTestState(state: TestState): TestState {
     ...state,
     index,
     revealed: false,
+    pendingAdvance: false,
     status: index >= state.queue.length ? "complete" : "active",
   };
 }
@@ -177,6 +179,8 @@ export function testApplyMove(
     return {
       state: {
         ...state,
+        revealed: false,
+        pendingAdvance: false,
         incorrectCount: state.incorrectCount + 1,
         weakPathKeys: appendWeakPathKey(state, card.pathKey),
       },
@@ -194,12 +198,17 @@ export function testApplyMove(
 }
 
 export function testReveal(state: TestState): TestState {
-  return state.revealed ? state : { ...state, revealed: true };
+  return state.revealed && state.pendingAdvance
+    ? state
+    : { ...state, revealed: true, pendingAdvance: true };
 }
 
 export function testAdvance(state: TestState): TestState {
   if (!state.queue[state.index]) {
     throw new Error("Cannot advance a completed test session");
+  }
+  if (!state.pendingAdvance) {
+    throw new Error("Cannot advance until the current card is resolved");
   }
   return advanceTestState(state);
 }

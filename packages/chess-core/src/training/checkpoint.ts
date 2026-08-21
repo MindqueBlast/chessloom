@@ -111,6 +111,7 @@ export function parseTestCheckpoint(json: string): TestState {
     (value.index as number) < 0 ||
     (value.index as number) > value.queue.length ||
     typeof value.revealed !== "boolean" ||
+    typeof value.pendingAdvance !== "boolean" ||
     !isSide(value.side) ||
     !isTestSideMode(value.sideMode) ||
     !isStatus(value.status) ||
