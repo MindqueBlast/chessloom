@@ -1,4 +1,5 @@
 import {
+  clampRandomTestN,
   parseLearnCheckpoint,
   serializeCheckpoint,
   type SessionMode,
@@ -12,11 +13,20 @@ export const SESSION_SIDE_MODES: Array<{ value: SideMode; label: string }> = [
   { value: "random", label: "Random" },
 ];
 
+export type TestRouteMode = "random" | "full";
+
 export type TrainingStartQuery = {
   chapterIndex?: number;
   sideMode?: SideMode;
   fresh?: boolean;
+  n?: number;
 };
+
+export function sessionModeFromTestRoute(
+  mode: TestRouteMode,
+): "random_test" | "full_test" {
+  return mode === "random" ? "random_test" : "full_test";
+}
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -44,15 +54,27 @@ export function parseSessionSideMode(
     : undefined;
 }
 
+export function parseRandomTestNParam(
+  value: string | string[] | undefined,
+): number | undefined {
+  const raw = firstParam(value);
+  if (raw === undefined || !/^\d+$/.test(raw)) {
+    return undefined;
+  }
+  return clampRandomTestN(Number(raw));
+}
+
 export function parseTrainingStartQuery(searchParams: {
   chapter?: string | string[];
   side?: string | string[];
   fresh?: string | string[];
+  n?: string | string[];
 }): TrainingStartQuery {
   return {
     chapterIndex: parseChapterIndexParam(searchParams.chapter),
     sideMode: parseSessionSideMode(searchParams.side),
     fresh: firstParam(searchParams.fresh) === "1",
+    n: parseRandomTestNParam(searchParams.n),
   };
 }
 
@@ -73,6 +95,25 @@ export function trainingPath(
   }
   const qs = params.toString();
   return `/studies/${studyId}/${mode}${qs ? `?${qs}` : ""}`;
+}
+
+export function testPath(
+  studyId: string,
+  mode: TestRouteMode,
+  query: TrainingStartQuery = {},
+): string {
+  const params = new URLSearchParams();
+  if (query.sideMode) {
+    params.set("side", query.sideMode);
+  }
+  if (query.fresh) {
+    params.set("fresh", "1");
+  }
+  if (mode === "random" && query.n !== undefined) {
+    params.set("n", String(clampRandomTestN(query.n)));
+  }
+  const qs = params.toString();
+  return `/studies/${studyId}/test/${mode}${qs ? `?${qs}` : ""}`;
 }
 
 export function learnCheckpointMatchesChapter(

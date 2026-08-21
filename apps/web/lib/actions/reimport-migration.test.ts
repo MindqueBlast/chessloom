@@ -13,6 +13,10 @@ const authorityPath = resolve(
   migrationsDir,
   "0004_training_service_authority.sql",
 );
+const lichessSourcePath = resolve(
+  migrationsDir,
+  "20260821130000_lichess_study_source.sql",
+);
 
 describe("reimport_study migration", () => {
   it("originally replaced the tree and pruned unmatched progress as invoker", async () => {
@@ -55,6 +59,45 @@ describe("reimport_study migration", () => {
     expect(definer).not.toContain("security invoker");
     expect(definer).toMatch(
       /grant execute on function public\.reimport_study\([\s\S]+to authenticated/,
+    );
+  });
+
+  it("adds lichess_study source type, columns, and RPC params", async () => {
+    const [lichessSource, files] = await Promise.all([
+      readFile(lichessSourcePath, "utf8"),
+      readdir(migrationsDir),
+    ]);
+    const ordered = [...files].filter((name) => name.endsWith(".sql")).sort();
+
+    expect(ordered.indexOf("20260820200000_reimport_study_definer.sql")).toBeLessThan(
+      ordered.indexOf("20260821130000_lichess_study_source.sql"),
+    );
+
+    expect(lichessSource).toContain(
+      "check (source_type in ('pgn_paste', 'pgn_upload', 'lichess_study'))",
+    );
+    expect(lichessSource).toContain("add column if not exists lichess_study_id text");
+    expect(lichessSource).toContain("add column if not exists lichess_study_url text");
+    expect(lichessSource).toContain("p_lichess_study_id text default null");
+    expect(lichessSource).toContain("p_lichess_study_url text default null");
+    expect(lichessSource).toContain(
+      "if p_source_type not in ('pgn_paste', 'pgn_upload', 'lichess_study') then",
+    );
+    expect(lichessSource).toContain("security definer");
+    expect(lichessSource).toMatch(
+      /delete from public\.position_progress[\s\S]+progress\.user_id = \(select auth\.uid\(\)\)[\s\S]+not exists[\s\S]+from public\.nodes/,
+    );
+    expect(lichessSource).toMatch(
+      /grant execute on function public\.import_study\([\s\S]+to authenticated/,
+    );
+    expect(lichessSource).toMatch(
+      /grant execute on function public\.reimport_study\([\s\S]+to authenticated/,
+    );
+    expect(lichessSource).toContain(
+      "lichess_study_id = coalesce(p_lichess_study_id, lichess_study_id)",
+    );
+    expect(lichessSource).toContain(
+      "lichess_study_url = coalesce(p_lichess_study_url, lichess_study_url)",
     );
   });
 });

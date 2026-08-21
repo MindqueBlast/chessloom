@@ -70,7 +70,11 @@ export function StudyCard({
           <CardHeader>
             <div className="mb-2 flex flex-wrap gap-2">
               <Badge variant="secondary">
-                {study.source_type === "pgn_upload" ? "File" : "Pasted PGN"}
+                {study.source_type === "lichess_study"
+                  ? "Lichess study"
+                  : study.source_type === "pgn_upload"
+                    ? "File"
+                    : "Pasted PGN"}
               </Badge>
               {study.dueCount > 0 ? (
                 <Badge variant="outline">

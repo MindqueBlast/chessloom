@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@mliebelt/pgn-parser": "^1.4.15",
-    "chess.js": "^1.0.0"
+    "chess.js": "^1.0.0",
+    "ts-fsrs": "^5.4.1"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

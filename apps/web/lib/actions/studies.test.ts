@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createClient, parsePgnToStudy, revalidatePath } = vi.hoisted(() => ({
+const {
+  createClient,
+  fetchLichessStudyPgn,
+  parsePgnToStudy,
+  revalidatePath,
+} = vi.hoisted(() => ({
   createClient: vi.fn(),
+  fetchLichessStudyPgn: vi.fn(),
   parsePgnToStudy: vi.fn(() => ({ title: "Imported", chapters: [] })),
   revalidatePath: vi.fn(),
 }));
@@ -9,6 +15,7 @@ const { createClient, parsePgnToStudy, revalidatePath } = vi.hoisted(() => ({
 vi.mock("@chessloom/chess-core", () => ({ parsePgnToStudy }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/supabase/server", () => ({ createClient }));
+vi.mock("@/lib/lichess/fetch-study", () => ({ fetchLichessStudyPgn }));
 vi.mock("@/lib/studies/import", () => ({
   flattenStudyTree: vi.fn(() => []),
   importSource: vi.fn(() => ({
@@ -20,6 +27,8 @@ vi.mock("@/lib/studies/import", () => ({
 import {
   deleteStudyAction,
   importPgnAction,
+  importPgnFormAction,
+  reimportLichessStudyAction,
   reimportPgnAction,
   renameStudyAction,
 } from "./studies";
@@ -256,6 +265,229 @@ describe("study action failure paths", () => {
     await expect(deleteStudyAction("study-1")).resolves.toEqual({
       ok: true,
       studyId: "study-1",
+    });
+  });
+});
+
+describe("Lichess import and reimport", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("imports via Lichess URL when lichessUrl is provided in the form", async () => {
+    fetchLichessStudyPgn.mockResolvedValue({
+      studyId: "abcDef12",
+      canonicalUrl: "https://lichess.org/study/abcDef12",
+      pgnText: '[Event "Italian"]\n\n1. e4 e5 *',
+      titleHint: "Italian",
+    });
+    const rpc = vi.fn().mockResolvedValue({ data: "study-lichess", error: null });
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      rpc,
+    });
+
+    const formData = new FormData();
+    formData.set("lichessUrl", "https://lichess.org/study/abcDef12");
+    formData.set("pgnText", '[Event "Ignored"]\n\n1. d4 *');
+
+    const result = await importPgnFormAction(null, formData);
+
+    expect(result).toEqual({ ok: true, studyId: "study-lichess" });
+    expect(fetchLichessStudyPgn).toHaveBeenCalledWith(
+      "https://lichess.org/study/abcDef12",
+    );
+    expect(rpc).toHaveBeenCalledWith("import_study", {
+      p_title: "Italian",
+      p_source_type: "lichess_study",
+      p_pgn_text: '[Event "Italian"]\n\n1. e4 e5 *',
+      p_storage_path: null,
+      p_chapters: [],
+      p_lichess_study_id: "abcDef12",
+      p_lichess_study_url: "https://lichess.org/study/abcDef12",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("uses form title over Lichess titleHint when both are provided", async () => {
+    fetchLichessStudyPgn.mockResolvedValue({
+      studyId: "abcDef12",
+      canonicalUrl: "https://lichess.org/study/abcDef12",
+      pgnText: '[Event "Italian"]\n\n1. e4 e5 *',
+      titleHint: "Italian",
+    });
+    const rpc = vi.fn().mockResolvedValue({ data: "study-lichess", error: null });
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      rpc,
+    });
+
+    const formData = new FormData();
+    formData.set("lichessUrl", "https://lichess.org/study/abcDef12");
+    formData.set("title", "My Custom Title");
+
+    await importPgnFormAction(null, formData);
+
+    expect(rpc).toHaveBeenCalledWith(
+      "import_study",
+      expect.objectContaining({ p_title: "My Custom Title" }),
+    );
+  });
+
+  it("returns fetch errors without calling import_study", async () => {
+    fetchLichessStudyPgn.mockRejectedValue(
+      new Error("Study not found or not public."),
+    );
+    const rpc = vi.fn();
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      rpc,
+    });
+
+    const formData = new FormData();
+    formData.set("lichessUrl", "https://lichess.org/study/missing01");
+
+    const result = await importPgnFormAction(null, formData);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Study not found or not public.",
+    });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("reimports a Lichess study from its stored URL", async () => {
+    fetchLichessStudyPgn.mockResolvedValue({
+      studyId: "abcDef12",
+      canonicalUrl: "https://lichess.org/study/abcDef12",
+      pgnText: '[Event "Updated"]\n\n1. e4 c5 *',
+      titleHint: "Updated",
+    });
+    const rpc = vi.fn().mockResolvedValue({ data: "study-1", error: null });
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                source_type: "lichess_study",
+                lichess_study_url: "https://lichess.org/study/abcDef12",
+                lichess_study_id: "abcDef12",
+              },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+      rpc,
+    });
+
+    const result = await reimportLichessStudyAction("study-1");
+
+    expect(result).toEqual({ ok: true, studyId: "study-1" });
+    expect(fetchLichessStudyPgn).toHaveBeenCalledWith(
+      "https://lichess.org/study/abcDef12",
+    );
+    expect(rpc).toHaveBeenCalledWith("reimport_study", {
+      p_study_id: "study-1",
+      p_source_type: "lichess_study",
+      p_pgn_text: '[Event "Updated"]\n\n1. e4 c5 *',
+      p_storage_path: null,
+      p_chapters: [],
+      p_lichess_study_id: "abcDef12",
+      p_lichess_study_url: "https://lichess.org/study/abcDef12",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/studies/study-1");
+  });
+
+  it("rejects reimport when the study is not a Lichess source", async () => {
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                source_type: "pgn_paste",
+                lichess_study_url: null,
+                lichess_study_id: null,
+              },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+      rpc: vi.fn(),
+    });
+
+    const result = await reimportLichessStudyAction("study-1");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Only Lichess studies can be refreshed from Lichess.",
+    });
+    expect(fetchLichessStudyPgn).not.toHaveBeenCalled();
+  });
+
+  it("surfaces fetch failures during Lichess reimport", async () => {
+    fetchLichessStudyPgn.mockRejectedValue(
+      new Error("Failed to fetch Lichess study PGN (500)."),
+    );
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                source_type: "lichess_study",
+                lichess_study_url: "https://lichess.org/study/abcDef12",
+                lichess_study_id: "abcDef12",
+              },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+      rpc: vi.fn(),
+    });
+
+    const result = await reimportLichessStudyAction("study-1");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Failed to fetch Lichess study PGN (500).",
     });
   });
 });

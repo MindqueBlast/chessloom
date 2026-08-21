@@ -1,5 +1,6 @@
 import type { PathKey, PositionProgress } from "../types.js";
 import type { LightweightConfig, MasteryScheduler } from "./types.js";
+import { createInitialFsrsProgress } from "./fsrs.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -26,21 +27,15 @@ function intervalForMastery(
   return intervalsMsByBand[Math.min(band, intervalsMsByBand.length - 1)]!;
 }
 
+/** @deprecated Use `createInitialFsrsProgress` instead. */
 export function createInitialProgress(
   pathKey: PathKey,
   now = new Date(),
 ): PositionProgress {
-  return {
-    pathKey,
-    attempts: 0,
-    correctCount: 0,
-    streak: 0,
-    mastery: MASTERY_MIN,
-    lastReviewedAt: null,
-    nextReviewAt: now.toISOString(),
-  };
+  return createInitialFsrsProgress(pathKey, now);
 }
 
+/** @deprecated Use `createFsrsScheduler` instead. */
 export function createLightweightScheduler(
   config: Partial<LightweightConfig> = {},
 ): MasteryScheduler {

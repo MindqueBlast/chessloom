@@ -25,9 +25,12 @@ export default function ImportPage() {
             <p className="font-mono text-xs tracking-[0.18em] text-primary uppercase">
               New study
             </p>
-            <h1 className="text-3xl font-semibold tracking-tight">Import a PGN</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              Import a study
+            </h1>
             <p className="text-muted-foreground">
-              Games become chapters, with every variation preserved for training.
+              Paste a Lichess study URL, PGN text, or upload a file. Games
+              become chapters with every variation preserved for training.
             </p>
           </div>
 
@@ -35,8 +38,8 @@ export default function ImportPage() {
             <CardHeader>
               <CardTitle>Study source</CardTitle>
               <CardDescription>
-                Paste PGN text or upload a .pgn file. Parsing happens securely on
-                the server.
+                Import from a Lichess study URL, pasted PGN text, or a .pgn
+                file. Parsing happens securely on the server.
               </CardDescription>
             </CardHeader>
             <CardContent>

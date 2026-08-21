@@ -4,7 +4,7 @@ Chess opening trainer. Import a PGN repertoire, then Learn and Practice it with 
 
 This is a [pnpm](https://pnpm.io/) workspace:
 
-- `packages/chess-core` — shared tree types, PGN parsing, Learn/Practice, and SRS
+- `packages/chess-core` — shared tree types, PGN parsing, Learn/Practice, and FSRS scheduling
 - `apps/web` — Next.js app (App Router) with Supabase auth, storage, and training UI
 
 ## Prerequisites
@@ -54,6 +54,28 @@ pnpm build
 
 Runtime (`pnpm dev`, Vercel) still needs real keys.
 
+## Optional engine analysis
+
+Learn, Practice, and Test include an optional **Analysis** panel powered by in-browser Stockfish (WASM). It is **off by default** — turn on **Show engine eval** to load the engine and see an eval bar plus principal variation for the position on the board.
+
+Engine output is **non-authoritative reference only**. It never grades moves, changes training feedback, or writes progress. Learn, Practice, and Test scoring stay **server-authoritative** via FSRS; the engine cannot override or replace that.
+
+## Import
+
+Sign in, then open **Import** (`/import`) to create a study from one of three sources:
+
+| Source | Notes |
+| --- | --- |
+| **Lichess study URL** | Paste a public link such as `https://lichess.org/study/abcDef12`. Chessloom fetches the study PGN on the server and stores it as `lichess_study`. |
+| **PGN paste** | Paste repertoire text directly. |
+| **PGN file** | Upload a `.pgn` file. |
+
+When a Lichess URL is filled in, paste and file upload are ignored for that submit.
+
+**Lichess constraints:** only **public** studies are supported. Private studies and Lichess OAuth are not implemented. Fetch or parse failures fail closed — no partial study is written.
+
+**Reimport:** on a study imported from Lichess, use **Refresh from Lichess** on the study page to pull the latest public PGN from the stored URL. PGN paste/upload studies keep the existing reimport dialog.
+
 ## Environment variables
 
 All app secrets live in `apps/web/.env.local` locally and in the Vercel project settings in production. Never commit `.env.local`.
@@ -86,7 +108,7 @@ Google OAuth client ID and secret are configured in the Supabase dashboard, not 
 
 The schema creates owner-scoped RLS policies and a private `pgns` Storage bucket. Store uploads beneath a user-owned path such as `<auth-user-id>/<file-name>.pgn`.
 
-`position_progress` and training checkpoints are read-only to authenticated clients. After user-scoped authentication and move validation, training server actions use the server-only service client to call `apply_training_result_and_checkpoint`. The RPC commits the scheduler result and checkpoint atomically; no browser or server-action input may provide mastery counters.
+`position_progress` and training checkpoints are read-only to authenticated clients. After user-scoped authentication and move validation, training server actions score attempts with **FSRS** in TypeScript (`createFsrsScheduler`), then use the server-only service client to call `apply_training_result_and_checkpoint`. The RPC persists the computed progress fields and checkpoint atomically; no browser or server-action input may provide mastery counters or FSRS card state.
 
 ### Google OAuth
 

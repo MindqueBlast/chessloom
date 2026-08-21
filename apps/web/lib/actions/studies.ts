@@ -3,6 +3,7 @@
 import { parsePgnToStudy } from "@chessloom/chess-core";
 import { revalidatePath } from "next/cache";
 
+import { fetchLichessStudyPgn } from "@/lib/lichess/fetch-study";
 import { createClient } from "@/lib/supabase/server";
 import { flattenStudyTree, importSource } from "@/lib/studies/import";
 import { toastCopy } from "../toasts";
@@ -123,10 +124,71 @@ export async function importPgnAction(
   return importPgn(input);
 }
 
+async function importLichessStudy(
+  lichessUrl: string,
+  title?: string,
+): Promise<StudyActionResult> {
+  try {
+    const fetched = await fetchLichessStudyPgn(lichessUrl);
+    const parsedStudy = parsePgnToStudy(fetched.pgnText);
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { ok: false, error: "Sign in before importing a study." };
+    }
+
+    const resolvedTitle =
+      title?.trim() ||
+      fetched.titleHint ||
+      parsedStudy.title ||
+      "Lichess study";
+
+    const { data: studyId, error: importError } = await supabase.rpc(
+      "import_study",
+      {
+        p_title: resolvedTitle,
+        p_source_type: "lichess_study",
+        p_pgn_text: fetched.pgnText,
+        p_storage_path: null,
+        p_chapters: flattenStudyTree(parsedStudy),
+        p_lichess_study_id: fetched.studyId,
+        p_lichess_study_url: fetched.canonicalUrl,
+      },
+    );
+
+    if (importError || typeof studyId !== "string") {
+      return {
+        ok: false,
+        error: importError?.message ?? "The study could not be saved.",
+      };
+    }
+
+    revalidatePath("/dashboard");
+    return { ok: true, studyId };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+}
+
 export async function importPgnFormAction(
   _previousState: StudyActionResult | null,
   formData: FormData,
 ): Promise<StudyActionResult> {
+  const lichessUrlField = formData.get("lichessUrl");
+  const lichessUrl =
+    typeof lichessUrlField === "string" ? lichessUrlField.trim() : "";
+
+  const title = formData.get("title");
+  const titleValue = typeof title === "string" ? title : undefined;
+
+  if (lichessUrl) {
+    return importLichessStudy(lichessUrl, titleValue);
+  }
+
   const pastedPgn = formData.get("pgnText");
   const uploadedFile = formData.get("pgnFile");
   let pgnText = typeof pastedPgn === "string" ? pastedPgn : "";
@@ -135,11 +197,81 @@ export async function importPgnFormAction(
     pgnText = await uploadedFile.text();
   }
 
-  const title = formData.get("title");
   return importPgn({
-    title: typeof title === "string" ? title : undefined,
+    title: titleValue,
     pgnText,
   });
+}
+
+export async function reimportLichessStudyAction(
+  studyId: string,
+): Promise<StudyActionResult> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { ok: false, error: "Sign in before reimporting a study." };
+    }
+
+    const { data: study, error: studyError } = await supabase
+      .from("studies")
+      .select("source_type, lichess_study_url, lichess_study_id")
+      .eq("id", studyId)
+      .maybeSingle();
+
+    if (studyError) {
+      return { ok: false, error: studyError.message };
+    }
+
+    if (!study) {
+      return { ok: false, error: "The study could not be reimported." };
+    }
+
+    if (study.source_type !== "lichess_study") {
+      return {
+        ok: false,
+        error: "Only Lichess studies can be refreshed from Lichess.",
+      };
+    }
+
+    if (!study.lichess_study_url) {
+      return {
+        ok: false,
+        error: "This Lichess study has no URL to refresh from.",
+      };
+    }
+
+    const fetched = await fetchLichessStudyPgn(study.lichess_study_url);
+    const parsedStudy = parsePgnToStudy(fetched.pgnText);
+
+    const { data: reimportedStudyId, error: reimportError } =
+      await supabase.rpc("reimport_study", {
+        p_study_id: studyId,
+        p_source_type: "lichess_study",
+        p_pgn_text: fetched.pgnText,
+        p_storage_path: null,
+        p_chapters: flattenStudyTree(parsedStudy),
+        p_lichess_study_id: fetched.studyId,
+        p_lichess_study_url: fetched.canonicalUrl,
+      });
+
+    if (reimportError || reimportedStudyId !== studyId) {
+      return {
+        ok: false,
+        error: reimportError?.message ?? "The study could not be reimported.",
+      };
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath(`/studies/${studyId}`);
+    return { ok: true, studyId };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
 }
 
 export async function reimportPgnAction(

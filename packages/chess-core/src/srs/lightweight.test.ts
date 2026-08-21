@@ -9,7 +9,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("createInitialProgress", () => {
   it("creates due, unreviewed progress for a path", () => {
-    expect(createInitialProgress("c0:e2e4", NOW)).toEqual({
+    expect(createInitialProgress("c0:e2e4", NOW)).toMatchObject({
       pathKey: "c0:e2e4",
       attempts: 0,
       correctCount: 0,
@@ -17,6 +17,15 @@ describe("createInitialProgress", () => {
       mastery: 0,
       lastReviewedAt: null,
       nextReviewAt: NOW.toISOString(),
+      fsrsStability: 0,
+      fsrsDifficulty: 0,
+      fsrsElapsedDays: 0,
+      fsrsScheduledDays: 0,
+      fsrsReps: 0,
+      fsrsLapses: 0,
+      fsrsLearningSteps: 0,
+      fsrsState: 0,
+      fsrsLastReview: null,
     });
   });
 });

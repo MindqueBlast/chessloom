@@ -3,6 +3,7 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, LoaderCircle } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,14 @@ import {
   importPgnFormAction,
   type StudyActionResult,
 } from "@/lib/actions/studies";
+import { motionTokens } from "@/lib/motion/tokens";
 import { toastCopy } from "@/lib/toasts";
 
 const initialState: StudyActionResult | null = null;
 
 export function ImportForm() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const [state, formAction, pending] = useActionState(
     importPgnFormAction,
     initialState,
@@ -54,6 +57,28 @@ export function ImportForm() {
       </div>
 
       <div className="space-y-2">
+        <Label htmlFor="lichessUrl">Lichess study URL</Label>
+        <Input
+          id="lichessUrl"
+          name="lichessUrl"
+          type="url"
+          placeholder="https://lichess.org/study/abc123"
+          inputMode="url"
+          autoComplete="url"
+        />
+        <p className="text-xs text-muted-foreground">
+          Paste a public Lichess study link to import it directly. When set,
+          PGN paste and file upload are ignored.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        or paste PGN
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <div className="space-y-2">
         <Label htmlFor="pgnText">Paste PGN</Label>
         <Textarea
           id="pgnText"
@@ -82,13 +107,33 @@ export function ImportForm() {
         </p>
       </div>
 
-      <Button type="submit" size="lg" disabled={pending}>
-        {pending ? (
-          <LoaderCircle className="animate-spin" />
-        ) : (
-          <FileUp />
-        )}
-        {pending ? "Importing…" : "Import study"}
+      <Button type="submit" size="lg" disabled={pending} className="min-w-40">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={pending ? "pending" : "idle"}
+            className="inline-flex items-center gap-1.5"
+            initial={
+              reduceMotion ? false : { opacity: 0, y: 4, filter: "blur(2px)" }
+            }
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={
+              reduceMotion
+                ? undefined
+                : { opacity: 0, y: -3, filter: "blur(2px)" }
+            }
+            transition={{
+              duration: reduceMotion ? 0 : motionTokens.durationFast,
+              ease: motionTokens.easeOut,
+            }}
+          >
+            {pending ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
+              <FileUp />
+            )}
+            {pending ? "Importing…" : "Import study"}
+          </motion.span>
+        </AnimatePresence>
       </Button>
     </form>
   );

@@ -1,20 +1,28 @@
 "use server";
 
 import {
+  createFsrsScheduler,
+  createInitialFsrsProgress,
   findNodeByPathKey,
   learnApplyUserMove,
   learnAutoOpponentIfNeeded,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
+  parseTestCheckpoint,
   practiceApplyMove,
   practiceReveal,
   serializeCheckpoint,
+  testAdvance,
+  testApplyMove,
+  testReveal,
+  buildTestSummary,
   type ChapterTree,
   type LearnState,
   type PositionProgress,
   type PracticeState,
   type SessionMode,
   type SideMode,
+  type TestState,
 } from "@chessloom/chess-core";
 
 import { createClient } from "@/lib/supabase/server";
@@ -23,15 +31,20 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   resumableLearnCheckpoint,
   resumablePracticeCheckpoint,
+  resumableTestCheckpoint,
 } from "../training/session";
 
 import {
   assertSessionUsable,
   buildChapterTrees,
+  createInitialTestCheckpoint,
   createInitialTrainingCheckpoint,
   normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
   progressFromRow,
+  progressFromRowMigrating,
+  progressToRow,
+  PROGRESS_ROW_SELECT,
   trainingResultRpcPayload,
   type ChapterRow,
   type NodeRow,
@@ -57,6 +70,12 @@ type MoveResult = {
   expectedCount: number;
   progress?: PositionProgress;
   checkpoint: unknown;
+  summary?: {
+    accuracy: number;
+    correctCount: number;
+    incorrectCount: number;
+    weakPathKeys: string[];
+  };
 };
 
 function jsonValue(value: unknown): unknown {
@@ -169,7 +188,7 @@ function chapterForPath(chapters: ChapterTree[], pathKey: string): ChapterTree {
 
 async function saveSession(
   session: TrainingSessionRow,
-  checkpoint: LearnState | PracticeState,
+  checkpoint: LearnState | PracticeState | TestState,
 ): Promise<unknown> {
   const client: ServiceClient = createServiceClient();
   const safeCheckpoint = jsonValue(checkpoint);
@@ -198,13 +217,35 @@ async function scorePositionAndSave(
   userId: string,
   pathKey: string,
   correct: boolean,
-  checkpoint: LearnState | PracticeState,
+  checkpoint: LearnState | PracticeState | TestState,
 ): Promise<{ progress: PositionProgress; checkpoint: unknown }> {
   if (userId !== session.user_id) {
     throw new Error("Training session is not owned by the current user");
   }
   const safeCheckpoint = jsonValue(checkpoint);
+  const now = new Date();
   const serviceClient = createServiceClient();
+  const { data: existingRow, error: loadError } = await serviceClient
+    .from("position_progress")
+    .select(PROGRESS_ROW_SELECT)
+    .eq("user_id", userId)
+    .eq("study_id", session.study_id)
+    .eq("path_key", pathKey)
+    .maybeSingle();
+
+  if (loadError) {
+    throw new Error(loadError.message);
+  }
+
+  const base = existingRow
+    ? progressFromRowMigrating(pathKey, existingRow as ProgressRow, now)
+    : createInitialFsrsProgress(pathKey, now);
+  const scheduler = createFsrsScheduler();
+  const next = correct
+    ? scheduler.onCorrect(base, now)
+    : scheduler.onIncorrect(base, now);
+  const progressRow = progressToRow(next);
+
   const { data, error } = await serviceClient.rpc(
     "apply_training_result_and_checkpoint",
     trainingResultRpcPayload(
@@ -213,6 +254,7 @@ async function scorePositionAndSave(
       session.study_id,
       pathKey,
       correct,
+      progressRow,
       safeCheckpoint,
       session.updated_at,
     ),
@@ -239,9 +281,58 @@ function learnState(checkpoint: unknown): LearnState {
   return parseLearnCheckpoint(serializeCheckpoint(checkpoint));
 }
 
+function testState(checkpoint: unknown): TestState {
+  return parseTestCheckpoint(serializeCheckpoint(checkpoint));
+}
+
+
+function testSummaryForState(state: TestState): MoveResult["summary"] | undefined {
+  return state.status === "complete" ? buildTestSummary(state) : undefined;
+}
+
+async function ownedTestSession(
+  client: SupabaseClient,
+  sessionId: string,
+): Promise<{ session: TrainingSessionRow; userId: string }> {
+  const user = await currentUser(client);
+  const { data, error } = await client
+    .from("training_sessions")
+    .select("id,user_id,study_id,mode,checkpoint,status,updated_at")
+    .eq("id", sessionId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Training session was not found");
+  }
+
+  const session = data as TrainingSessionRow;
+  if (session.mode !== "random_test" && session.mode !== "full_test") {
+    throw new Error("Training session mode does not match this action");
+  }
+
+  try {
+    assertSessionUsable(session, user.id, session.mode);
+  } catch (guardError) {
+    if (
+      guardError instanceof Error &&
+      guardError.message === "Training session has expired"
+    ) {
+      await abandonSession(session);
+    }
+    throw guardError;
+  }
+
+  return { session, userId: user.id };
+}
+
 export type TrainingSessionStartOptions = {
   chapterIndex?: number;
   sideMode?: SideMode;
+  n?: number;
 };
 
 export async function startTrainingSessionAction(
@@ -270,20 +361,21 @@ export async function startTrainingSessionAction(
   const sideMode =
     options.sideMode ??
     normalizeTrainingSideMode(profile?.default_side_mode);
-  const [chapters, progressResult] = await Promise.all([
-    studyChapters(client, studyId),
-    mode === "practice"
+  const progressRowsPromise =
+    mode === "practice" || mode === "random_test"
       ? client
           .from("position_progress")
-          .select(
-            "path_key,attempts,correct_count,streak,mastery,last_reviewed_at,due_at",
-          )
+          .select(`path_key,${PROGRESS_ROW_SELECT}`)
           .eq("study_id", studyId)
-      : Promise.resolve({ data: [], error: null }),
+      : Promise.resolve({ data: [], error: null });
+  const [chapters, progressResult] = await Promise.all([
+    studyChapters(client, studyId),
+    progressRowsPromise,
   ]);
   if (progressResult.error) {
     throw new Error(progressResult.error.message);
   }
+  const progressRows = (progressResult.data ?? []) as PracticeProgressRow[];
   const checkpoint =
     mode === "learn"
       ? createInitialTrainingCheckpoint(
@@ -292,12 +384,22 @@ export async function startTrainingSessionAction(
           sideMode,
           options.chapterIndex,
         )
-      : createInitialTrainingCheckpoint(
-          "practice",
-          chapters,
-          sideMode,
-          (progressResult.data ?? []) as PracticeProgressRow[],
-        );
+      : mode === "practice"
+        ? createInitialTrainingCheckpoint(
+            "practice",
+            chapters,
+            sideMode,
+            progressRows,
+          )
+        : mode === "random_test"
+          ? createInitialTestCheckpoint(
+              "random_test",
+              chapters,
+              sideMode,
+              progressRows,
+              { n: options.n },
+            )
+          : createInitialTestCheckpoint("full_test", chapters, sideMode);
   const safeCheckpoint = jsonValue(checkpoint);
   const serviceClient = createServiceClient();
   const { data, error } = await serviceClient
@@ -378,6 +480,86 @@ export async function revealPracticeExpectedAction(
     ucis: node.children.flatMap((child) =>
       child.uci === null ? [] : [child.uci],
     ),
+  };
+}
+
+export async function submitTestMoveAction(input: {
+  sessionId: string;
+  pathKey: string;
+  uci: string;
+}): Promise<MoveResult> {
+  const client = await createClient();
+  const { session, userId } = await ownedTestSession(client, input.sessionId);
+  const state = testState(session.checkpoint);
+  const card = state.queue[state.index];
+  if (!card || card.pathKey !== input.pathKey) {
+    throw new Error("Move does not match the current test position");
+  }
+
+  const chapters = await studyChapters(client, session.study_id);
+  const chapter = chapterForPath(chapters, input.pathKey);
+  const result = testApplyMove(state, chapter, { uci: input.uci });
+  const committed = await scorePositionAndSave(
+    session,
+    userId,
+    input.pathKey,
+    result.feedback.ok,
+    result.state,
+  );
+
+  return {
+    ok: result.feedback.ok,
+    expectedCount: result.feedback.ok ? 0 : result.feedback.expected.length,
+    progress: committed.progress,
+    checkpoint: committed.checkpoint,
+    summary: testSummaryForState(result.state),
+  };
+}
+
+export async function revealTestExpectedAction(
+  sessionId: string,
+  pathKey: string,
+): Promise<{ sans: string[]; ucis: string[] }> {
+  const client = await createClient();
+  const { session } = await ownedTestSession(client, sessionId);
+  const state = testState(session.checkpoint);
+  const card = state.queue[state.index];
+  if (!card || card.pathKey !== pathKey) {
+    throw new Error("Reveal does not match the current test position");
+  }
+
+  const chapters = await studyChapters(client, session.study_id);
+  const chapter = chapterForPath(chapters, pathKey);
+  const node = findNodeByPathKey(chapter, pathKey)!;
+  await saveSession(session, testReveal(state));
+
+  return {
+    sans: node.children.flatMap((child) =>
+      child.san === null ? [] : [child.san],
+    ),
+    ucis: node.children.flatMap((child) =>
+      child.uci === null ? [] : [child.uci],
+    ),
+  };
+}
+
+export async function advanceTestAction(
+  sessionId: string,
+  pathKey: string,
+): Promise<{ checkpoint: unknown; summary?: MoveResult["summary"] }> {
+  const client = await createClient();
+  const { session } = await ownedTestSession(client, sessionId);
+  const state = testState(session.checkpoint);
+  const card = state.queue[state.index];
+  if (!card || card.pathKey !== pathKey) {
+    throw new Error("Advance does not match the current test position");
+  }
+
+  const nextState = testAdvance(state);
+  const checkpoint = await saveSession(session, nextState);
+  return {
+    checkpoint,
+    summary: testSummaryForState(nextState),
   };
 }
 
@@ -533,7 +715,11 @@ export async function resumeSessionAction(
   const checkpoint =
     mode === "learn"
       ? resumableLearnCheckpoint(session.checkpoint, chapters)
-      : resumablePracticeCheckpoint(session.checkpoint, chapters);
+      : mode === "practice"
+        ? resumablePracticeCheckpoint(session.checkpoint, chapters)
+        : mode === "random_test" || mode === "full_test"
+          ? resumableTestCheckpoint(session.checkpoint, chapters)
+          : null;
   if (!checkpoint) {
     await abandonSession(session);
     return null;

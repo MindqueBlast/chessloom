@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { SideMode } from "@chessloom/chess-core";
-import { BookOpen, GitBranch, Target } from "lucide-react";
+import { clampRandomTestN, type SideMode } from "@chessloom/chess-core";
+import { BookOpen, ClipboardCheck, GitBranch, Target } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
+import { Input } from "@/components/ui/input";
+import { SESSION_SIDE_MODES, testPath, trainingPath } from "@/lib/training/start";
 import type { DefaultSideMode } from "@/lib/settings/preferences";
 import { StudyActions } from "@/components/studies/StudyActions";
 
@@ -27,10 +28,21 @@ type ChapterSummary = {
   trainableCount: number;
 };
 
+function sourceBadgeLabel(sourceType: string) {
+  if (sourceType === "lichess_study") {
+    return "Lichess study";
+  }
+  if (sourceType === "pgn_upload") {
+    return "Stored PGN";
+  }
+  return "Imported PGN";
+}
+
 export function StudyOverview({
   studyId,
   title,
   sourceType,
+  lichessStudyUrl,
   createdAt,
   defaultSideMode,
   chapterCount,
@@ -40,6 +52,7 @@ export function StudyOverview({
   studyId: string;
   title: string;
   sourceType: string;
+  lichessStudyUrl: string | null;
   createdAt: string;
   defaultSideMode: DefaultSideMode;
   chapterCount: number;
@@ -47,18 +60,18 @@ export function StudyOverview({
   chapters: ChapterSummary[];
 }) {
   const [sideMode, setSideMode] = useState<SideMode>(defaultSideMode);
+  const [randomTestN, setRandomTestN] = useState(20);
   // DefaultSideMode never includes "random", so equality alone decides the query.
   const sideQuery = sideMode === defaultSideMode ? undefined : sideMode;
   const forceFresh = sideMode === "random" || sideMode !== defaultSideMode;
+  const randomN = clampRandomTestN(randomTestN);
 
   return (
     <>
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="mb-3 flex items-center gap-2">
-            <Badge variant="secondary">
-              {sourceType === "pgn_upload" ? "Stored PGN" : "Imported PGN"}
-            </Badge>
+            <Badge variant="secondary">{sourceBadgeLabel(sourceType)}</Badge>
             <span className="text-xs text-muted-foreground">
               {new Intl.DateTimeFormat("en", {
                 dateStyle: "medium",
@@ -117,6 +130,55 @@ export function StudyOverview({
               </Link>
             </Button>
           </div>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Repertoire tests
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor="random-test-n"
+                  className="text-xs text-muted-foreground"
+                >
+                  Positions
+                </label>
+                <Input
+                  id="random-test-n"
+                  type="number"
+                  min={5}
+                  max={50}
+                  value={randomTestN}
+                  onChange={(event) =>
+                    setRandomTestN(Number(event.target.value))
+                  }
+                  className="w-20"
+                />
+              </div>
+              <Button asChild variant="secondary">
+                <Link
+                  href={testPath(studyId, "random", {
+                    sideMode: sideQuery,
+                    fresh: forceFresh,
+                    n: randomN,
+                  })}
+                >
+                  <ClipboardCheck />
+                  Random Test
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link
+                  href={testPath(studyId, "full", {
+                    sideMode: sideQuery,
+                    fresh: forceFresh,
+                  })}
+                >
+                  <ClipboardCheck />
+                  Full Test
+                </Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -124,12 +186,18 @@ export function StudyOverview({
         <CardHeader>
           <CardTitle>Manage study</CardTitle>
           <CardDescription>
-            Rename, replace the PGN while preserving matching progress, or
-            permanently remove the study.
+            {sourceType === "lichess_study"
+              ? "Rename, refresh from Lichess while preserving matching progress, or permanently remove the study."
+              : "Rename, replace the PGN while preserving matching progress, or permanently remove the study."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <StudyActions studyId={studyId} initialTitle={title} />
+          <StudyActions
+            studyId={studyId}
+            initialTitle={title}
+            sourceType={sourceType}
+            lichessStudyUrl={lichessStudyUrl}
+          />
         </CardContent>
       </Card>
 

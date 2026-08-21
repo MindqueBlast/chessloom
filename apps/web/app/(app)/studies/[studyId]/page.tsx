@@ -32,7 +32,7 @@ export default async function StudyPage({
     await Promise.all([
       supabase
         .from("studies")
-        .select("id,title,source_type,created_at")
+        .select("id,title,source_type,lichess_study_url,created_at")
         .eq("id", studyId)
         .maybeSingle(),
       supabase
@@ -66,6 +66,7 @@ export default async function StudyPage({
           studyId={study.id}
           title={study.title}
           sourceType={study.source_type}
+          lichessStudyUrl={study.lichess_study_url}
           createdAt={study.created_at}
           defaultSideMode={profileSideMode(profile?.default_side_mode)}
           chapterCount={chapters?.length ?? 0}

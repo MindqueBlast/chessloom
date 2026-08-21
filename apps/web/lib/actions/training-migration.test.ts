@@ -1,16 +1,25 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const migrationPath = resolve(
-  process.cwd(),
-  "../../supabase/migrations/0004_training_service_authority.sql",
+const migrationsDir = resolve(process.cwd(), "../../supabase/migrations");
+const authorityPath = resolve(
+  migrationsDir,
+  "0004_training_service_authority.sql",
+);
+const fsrsPath = resolve(
+  migrationsDir,
+  "20260821140000_fsrs_progress.sql",
+);
+const testModesPath = resolve(
+  migrationsDir,
+  "20260821150000_test_session_modes.sql",
 );
 
 describe("training authority migration", () => {
   it("makes scoring and checkpoint writes service-only and atomic", async () => {
-    const sql = await readFile(migrationPath, "utf8");
+    const sql = await readFile(authorityPath, "utf8");
 
     expect(sql).toContain(
       "revoke insert, update, delete on public.position_progress from authenticated",
@@ -38,6 +47,82 @@ describe("training authority migration", () => {
     );
     expect(sql).toMatch(
       /grant execute on function public\.apply_training_result_and_checkpoint\([\s\S]+to service_role/,
+    );
+  });
+});
+
+describe("FSRS progress migration", () => {
+  it("adds FSRS columns and replaces RPCs with TS-authored progress upserts", async () => {
+    const [sql, authority, files] = await Promise.all([
+      readFile(fsrsPath, "utf8"),
+      readFile(authorityPath, "utf8"),
+      readdir(migrationsDir),
+    ]);
+    const ordered = [...files].filter((name) => name.endsWith(".sql")).sort();
+
+    expect(ordered.indexOf("0004_training_service_authority.sql")).toBeLessThan(
+      ordered.indexOf("20260821140000_fsrs_progress.sql"),
+    );
+
+    expect(sql).toContain(
+      "add column if not exists fsrs_stability double precision not null default 0",
+    );
+    expect(sql).toContain(
+      "add column if not exists fsrs_learning_steps integer not null default 0",
+    );
+    expect(sql).toContain(
+      "add column if not exists fsrs_last_review timestamptz",
+    );
+    expect(sql).toContain(
+      "drop function if exists public.apply_training_result(uuid, text, boolean)",
+    );
+    expect(sql).toContain(
+      "drop function if exists public.apply_training_result_and_checkpoint(",
+    );
+    expect(sql).toContain("private.validate_training_progress(p_progress jsonb)");
+    expect(sql).toContain("p_progress jsonb");
+    expect(sql).toContain("fsrs_learning_steps = excluded.fsrs_learning_steps");
+    expect(sql).not.toMatch(/mastery \+ 8|mastery - 15|least\(100, progress\.mastery/);
+    expect(sql).toMatch(
+      /create function public\.apply_training_result_and_checkpoint\([\s\S]+p_progress jsonb[\s\S]+p_checkpoint jsonb[\s\S]+p_expected_updated_at timestamptz/,
+    );
+    expect(sql).toMatch(
+      /update public\.training_sessions[\s\S]+checkpoint = p_checkpoint[\s\S]+updated_at = p_expected_updated_at/,
+    );
+    expect(sql).toMatch(
+      /revoke all on function public\.apply_training_result_and_checkpoint\([\s\S]+from public, authenticated, anon/,
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.apply_training_result_and_checkpoint\([\s\S]+to service_role/,
+    );
+    expect(sql).toMatch(
+      /revoke all on function public\.apply_training_result\([\s\S]+from public, authenticated, anon/,
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.apply_training_result\([\s\S]+to service_role/,
+    );
+
+    expect(authority).toMatch(/mastery \+ 8|mastery - 15/);
+    expect(sql).not.toMatch(/mastery \+ 8|mastery - 15/);
+  });
+});
+
+describe("test session modes migration", () => {
+  it("allows random_test and full_test training session modes", async () => {
+    const [sql, files] = await Promise.all([
+      readFile(testModesPath, "utf8"),
+      readdir(migrationsDir),
+    ]);
+    const ordered = [...files].filter((name) => name.endsWith(".sql")).sort();
+
+    expect(ordered.indexOf("20260821140000_fsrs_progress.sql")).toBeLessThan(
+      ordered.indexOf("20260821150000_test_session_modes.sql"),
+    );
+    expect(sql).toContain(
+      "drop constraint if exists training_sessions_mode_check",
+    );
+    expect(sql).toContain(
+      "check (mode in ('learn', 'practice', 'random_test', 'full_test'))",
     );
   });
 });
