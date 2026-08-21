@@ -54,6 +54,22 @@ pnpm build
 
 Runtime (`pnpm dev`, Vercel) still needs real keys.
 
+## Import
+
+Sign in, then open **Import** (`/import`) to create a study from one of three sources:
+
+| Source | Notes |
+| --- | --- |
+| **Lichess study URL** | Paste a public link such as `https://lichess.org/study/abcDef12`. Chessloom fetches the study PGN on the server and stores it as `lichess_study`. |
+| **PGN paste** | Paste repertoire text directly. |
+| **PGN file** | Upload a `.pgn` file. |
+
+When a Lichess URL is filled in, paste and file upload are ignored for that submit.
+
+**Lichess constraints:** only **public** studies are supported. Private studies and Lichess OAuth are not implemented. Fetch or parse failures fail closed — no partial study is written.
+
+**Reimport:** on a study imported from Lichess, use **Refresh from Lichess** on the study page to pull the latest public PGN from the stored URL. PGN paste/upload studies keep the existing reimport dialog.
+
 ## Environment variables
 
 All app secrets live in `apps/web/.env.local` locally and in the Vercel project settings in production. Never commit `.env.local`.
