@@ -1,6 +1,7 @@
 export * from "./lichess/url.js";
 export * from "./path-key.js";
 export * from "./pgn/parse.js";
+export * from "./srs/fsrs.js";
 export * from "./srs/lightweight.js";
 export * from "./srs/types.js";
 export * from "./training/checkpoint.js";

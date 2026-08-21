@@ -38,6 +38,14 @@ export interface PositionProgress {
   mastery: number;
   lastReviewedAt: string | null;
   nextReviewAt: string;
+  fsrsStability: number;
+  fsrsDifficulty: number;
+  fsrsElapsedDays: number;
+  fsrsScheduledDays: number;
+  fsrsReps: number;
+  fsrsLapses: number;
+  fsrsState: number;
+  fsrsLastReview: string | null;
 }
 
 export type SideMode = "white" | "black" | "both" | "random";
