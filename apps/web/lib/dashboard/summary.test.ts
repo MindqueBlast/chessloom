@@ -71,6 +71,9 @@ describe("buildDashboardSummary", () => {
     expect(summary).toMatchObject({
       dueCount: 2,
       weakPathKeys: ["c0:e2e4"],
+      weakPositions: [
+        { studyId: "study-1", pathKey: "c0:e2e4", mastery: 0 },
+      ],
       studies: [
         {
           chapterCount: 1,

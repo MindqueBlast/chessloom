@@ -3,9 +3,9 @@
 import { useMemo } from "react";
 import { Chess, type Square } from "chess.js";
 import { useReducedMotion } from "motion/react";
-import { useTheme } from "next-themes";
 import { Chessboard } from "react-chessboard";
 
+import { useBoardSquareColors } from "@/lib/theme/board-colors";
 import { boardAnimationOptions, toUci } from "@/lib/training/ui";
 
 import { BoardFrame } from "./BoardFrame";
@@ -21,9 +21,8 @@ export function ChessBoard({
   disabled?: boolean;
   onMove: (uci: string) => void;
 }) {
-  const { resolvedTheme } = useTheme();
   const reduceMotion = useReducedMotion();
-  const isDark = resolvedTheme !== "light";
+  const squareColors = useBoardSquareColors();
   const game = useMemo(() => new Chess(fen), [fen]);
 
   return (
@@ -35,10 +34,10 @@ export function ChessBoard({
           allowDragging: !disabled,
           ...boardAnimationOptions(Boolean(reduceMotion)),
           darkSquareStyle: {
-            backgroundColor: isDark ? "#285b5d" : "#4f8583",
+            backgroundColor: squareColors.dark,
           },
           lightSquareStyle: {
-            backgroundColor: isDark ? "#a9c7bd" : "#dce9e2",
+            backgroundColor: squareColors.light,
           },
           boardStyle: {
             borderRadius: "0.75rem",
@@ -46,13 +45,23 @@ export function ChessBoard({
           onPieceDrop: ({ sourceSquare, targetSquare }) => {
             if (disabled || !sourceSquare || !targetSquare) return false;
             const piece = game.get(sourceSquare as Square);
-            onMove(
-              toUci(
-                sourceSquare,
-                targetSquare,
-                piece?.type === "p" ? "p" : undefined,
-              ),
+            const uci = toUci(
+              sourceSquare,
+              targetSquare,
+              piece?.type === "p" ? "p" : undefined,
             );
+            try {
+              const probe = new Chess(fen);
+              const moved = probe.move({
+                from: sourceSquare,
+                to: targetSquare,
+                promotion: uci.length > 4 ? (uci[4] as "q") : undefined,
+              });
+              if (!moved) return false;
+            } catch {
+              return false;
+            }
+            onMove(uci);
             return true;
           },
         }}

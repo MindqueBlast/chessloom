@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Chess } from "chess.js";
 import { useReducedMotion } from "motion/react";
-import { useTheme } from "next-themes";
 import { Chessboard } from "react-chessboard";
 
+import { useBoardSquareColors } from "@/lib/theme/board-colors";
 import { boardAnimationOptions } from "@/lib/training/ui";
 
 const DEMO_START =
@@ -19,9 +19,8 @@ export function ShowcaseBoard({
   fen: string;
   className?: string;
 }) {
-  const { resolvedTheme } = useTheme();
   const reduceMotion = useReducedMotion();
-  const isDark = resolvedTheme !== "light";
+  const squareColors = useBoardSquareColors();
 
   return (
     <div
@@ -36,10 +35,10 @@ export function ShowcaseBoard({
           allowDragging: false,
           ...boardAnimationOptions(Boolean(reduceMotion)),
           darkSquareStyle: {
-            backgroundColor: isDark ? "#285b5d" : "#4f8583",
+            backgroundColor: squareColors.dark,
           },
           lightSquareStyle: {
-            backgroundColor: isDark ? "#a9c7bd" : "#dce9e2",
+            backgroundColor: squareColors.light,
           },
           boardStyle: {
             borderRadius: "0.75rem",

@@ -20,6 +20,7 @@ export type TrainingStartQuery = {
   sideMode?: SideMode;
   fresh?: boolean;
   n?: number;
+  queueMode?: "due" | "weak" | "study_ahead";
 };
 
 export function sessionModeFromTestRoute(
@@ -54,6 +55,19 @@ export function parseSessionSideMode(
     : undefined;
 }
 
+export function parsePracticeQueueMode(
+  value: string | string[] | undefined,
+): TrainingStartQuery["queueMode"] | undefined {
+  const raw = firstParam(value);
+  if (raw === "due" || raw === "weak" || raw === "study_ahead") {
+    return raw;
+  }
+  if (raw === "1" || raw === "ahead") {
+    return "study_ahead";
+  }
+  return undefined;
+}
+
 export function parseRandomTestNParam(
   value: string | string[] | undefined,
 ): number | undefined {
@@ -69,12 +83,17 @@ export function parseTrainingStartQuery(searchParams: {
   side?: string | string[];
   fresh?: string | string[];
   n?: string | string[];
+  queue?: string | string[];
+  ahead?: string | string[];
 }): TrainingStartQuery {
   return {
     chapterIndex: parseChapterIndexParam(searchParams.chapter),
     sideMode: parseSessionSideMode(searchParams.side),
     fresh: firstParam(searchParams.fresh) === "1",
     n: parseRandomTestNParam(searchParams.n),
+    queueMode:
+      parsePracticeQueueMode(searchParams.queue) ??
+      (firstParam(searchParams.ahead) === "1" ? "study_ahead" : undefined),
   };
 }
 
@@ -92,6 +111,9 @@ export function trainingPath(
   }
   if (query.fresh) {
     params.set("fresh", "1");
+  }
+  if (query.queueMode && query.queueMode !== "due") {
+    params.set("queue", query.queueMode);
   }
   const qs = params.toString();
   return `/studies/${studyId}/${mode}${qs ? `?${qs}` : ""}`;

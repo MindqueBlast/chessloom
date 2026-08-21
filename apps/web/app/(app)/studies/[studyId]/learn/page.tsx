@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { parseLearnCheckpoint, serializeCheckpoint } from "@chessloom/chess-core";
 
 import { AppHeader } from "@/components/app/AppHeader";
+import { PageTransition } from "@/components/motion/PageTransition";
 import { LearnView } from "@/components/training/LearnView";
 import { Button } from "@/components/ui/button";
 import {
@@ -101,12 +102,14 @@ export default async function LearnPage({
             {study.title}
           </Link>
         </Button>
-        <LearnView
-          studyId={studyId}
-          sessionId={session.sessionId}
-          chapters={trees}
-          initialCheckpoint={checkpoint}
-        />
+        <PageTransition>
+          <LearnView
+            studyId={studyId}
+            sessionId={session.sessionId}
+            chapters={trees}
+            initialCheckpoint={checkpoint}
+          />
+        </PageTransition>
       </section>
     </main>
   );

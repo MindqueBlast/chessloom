@@ -32,22 +32,28 @@ import { cn } from "@/lib/utils";
 const PGN_SNIPPET = `[Event "Italian Game"]
 1. e4 e5 2. Nf3 Nc6 3. Bc4 *`;
 
+const LICHESS_URL = "https://lichess.org/study/abcdefgh";
+
 function ImportDemo() {
   const reduceMotion = useReducedMotion();
   const [visible, setVisible] = useState(
     reduceMotion ? PGN_SNIPPET.length : 0,
   );
+  const [showLichess, setShowLichess] = useState(Boolean(reduceMotion));
 
   useEffect(() => {
     if (reduceMotion) {
       setVisible(PGN_SNIPPET.length);
+      setShowLichess(true);
       return;
     }
     setVisible(0);
+    setShowLichess(false);
     const id = window.setInterval(() => {
       setVisible((count) => {
         if (count >= PGN_SNIPPET.length) {
           window.clearInterval(id);
+          setShowLichess(true);
           return count;
         }
         return count + 1;
@@ -65,6 +71,15 @@ function ImportDemo() {
             <span className="animate-pulse text-foreground">▍</span>
           ) : null}
         </pre>
+      </div>
+      <div
+        className={cn(
+          "rounded-xl bg-muted/40 px-4 py-3 font-mono text-xs text-muted-foreground ring-1 ring-foreground/10 transition-opacity",
+          showLichess ? "opacity-100" : "opacity-40",
+        )}
+      >
+        Or import a Lichess study URL
+        <p className="mt-1 text-foreground/80">{LICHESS_URL}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {["Italian Game", "3 chapters", "42 moves"].map((chip) => (
@@ -142,16 +157,23 @@ function MasteryDemo() {
     <div className="space-y-5">
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
-          <span>Position mastery</span>
+          <span>Repertoire mastery</span>
           <span className="font-mono text-muted-foreground">{value}%</span>
         </div>
         <Progress value={value} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg bg-muted/50 px-3 py-3 ring-1 ring-foreground/8">
+        <p className="font-mono text-[0.65rem] tracking-[0.14em] text-muted-foreground uppercase">
+          Due queue
+        </p>
+        <p className="mt-1 text-sm text-foreground/90">
+          6 positions ready · Random Test or Full Test next
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
         {[
-          { label: "Due today", value: "6" },
-          { label: "Streak", value: "4d" },
-          { label: "Reviewed", value: "128" },
+          { label: "Random Test", value: "Quiz weak lines" },
+          { label: "Full Test", value: "Entire repertoire" },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -160,7 +182,7 @@ function MasteryDemo() {
             <p className="font-mono text-[0.65rem] tracking-[0.14em] text-muted-foreground uppercase">
               {stat.label}
             </p>
-            <p className="mt-1 text-xl font-semibold tracking-tight">
+            <p className="mt-1 text-sm font-medium tracking-tight">
               {stat.value}
             </p>
           </div>
@@ -228,7 +250,7 @@ const STEPS = [
   {
     id: "import",
     eyebrow: "01 · Import",
-    title: "Paste a PGN. Get a repertoire tree.",
+    title: "Paste a PGN or Lichess study URL.",
     body: "Your imported games become the source of truth—chapters, branches, and comments stay faithful to the file.",
     icon: FileUp,
     demo: <ImportDemo />,
@@ -244,16 +266,16 @@ const STEPS = [
   {
     id: "practice",
     eyebrow: "03 · Practice",
-    title: "Test recall where it matters.",
+    title: "Drill due and weak positions.",
     body: "Practice quizzes due and weak positions. The board always shows the move you played before you continue.",
     icon: Target,
     demo: <PracticeDemoPanel />,
   },
   {
     id: "mastery",
-    eyebrow: "04 · Mastery",
-    title: "Retain lines with FSRS scheduling.",
-    body: "FSRS updates mastery and due dates from real attempts—so your queue stays honest and focused.",
+    eyebrow: "04 · Test / Mastery",
+    title: "Prove recall with Random and Full Tests.",
+    body: "FSRS updates mastery and due dates from real attempts. Test mode quizzes your repertoire so retention stays honest.",
     icon: Repeat2,
     demo: <MasteryDemo />,
   },
@@ -271,7 +293,7 @@ export function LandingShowcase() {
             How Chessloom works
           </p>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-balance sm:text-4xl">
-            Import, learn, practice, retain.
+            Import, learn, practice, test.
           </h2>
           <p className="mt-4 text-lg leading-8 text-muted-foreground">
             A focused loop for club players who already know what they want to

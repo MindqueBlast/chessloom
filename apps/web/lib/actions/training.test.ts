@@ -293,6 +293,7 @@ describe("authoritative practice actions", () => {
         index: 0,
         revealed: false,
         side: "white",
+        sideMode: "white",
         status: "active",
       },
     });

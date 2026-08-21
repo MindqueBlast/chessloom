@@ -5,6 +5,8 @@ import Link from "next/link";
 import { clampRandomTestN, type SideMode } from "@chessloom/chess-core";
 import { BookOpen, ClipboardCheck, GitBranch, Target } from "lucide-react";
 
+import { PageTransition } from "@/components/motion/PageTransition";
+import { StaggerItem } from "@/components/motion/StaggerItem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,11 +65,12 @@ export function StudyOverview({
   const [randomTestN, setRandomTestN] = useState(20);
   // DefaultSideMode never includes "random", so equality alone decides the query.
   const sideQuery = sideMode === defaultSideMode ? undefined : sideMode;
-  const forceFresh = sideMode === "random" || sideMode !== defaultSideMode;
+  // Only random always starts fresh; other sides resume when the page allows.
+  const forceFresh = sideMode === "random";
   const randomN = clampRandomTestN(randomTestN);
 
   return (
-    <>
+    <PageTransition>
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="mb-3 flex items-center gap-2">
@@ -127,6 +130,18 @@ export function StudyOverview({
               >
                 <Target />
                 Practice
+              </Link>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link
+                href={trainingPath(studyId, "practice", {
+                  sideMode: sideQuery,
+                  fresh: true,
+                  queueMode: "weak",
+                })}
+              >
+                <Target />
+                Practice weak
               </Link>
             </Button>
           </div>
@@ -203,8 +218,9 @@ export function StudyOverview({
 
       <div className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight">Chapters</h2>
-        {chapters.map((chapter) => (
-          <Card key={chapter.id} size="sm">
+        {chapters.map((chapter, index) => (
+          <StaggerItem key={chapter.id} index={index}>
+          <Card size="sm">
             <CardHeader>
               <CardTitle>
                 {chapter.index + 1}. {chapter.name}
@@ -235,8 +251,9 @@ export function StudyOverview({
               </Button>
             </CardContent>
           </Card>
+          </StaggerItem>
         ))}
       </div>
-    </>
+    </PageTransition>
   );
 }

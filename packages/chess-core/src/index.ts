@@ -1,4 +1,5 @@
 export * from "./lichess/url.js";
+export * from "./path-format.js";
 export * from "./path-key.js";
 export * from "./pgn/parse.js";
 export * from "./srs/fsrs.js";

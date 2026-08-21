@@ -20,6 +20,7 @@ export interface PracticeState {
   index: number;
   revealed: boolean;
   side: TrainingSide;
+  sideMode: SideMode;
   status: "active" | "complete";
 }
 
@@ -39,6 +40,7 @@ export function startPractice(
     index: 0,
     revealed: false,
     side,
+    sideMode,
     status: queue.length === 0 ? "complete" : "active",
   };
 }

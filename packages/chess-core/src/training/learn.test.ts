@@ -154,7 +154,7 @@ describe("learn training", () => {
     expect(atNf3.status).toBe("complete");
   });
 
-  it("auto-plays the mainline child, not a side variation listed first in PGN", () => {
+  it("does not auto-play when the opponent has multiple replies", () => {
     const chapter = parsePgnToStudy(
       "1. e4 e5 2. Nf3 (2. Nc3) 2... Nc6 *",
     ).chapters[0]!;
@@ -170,6 +170,7 @@ describe("learn training", () => {
 
     expect(nf3.san).toBe("Nf3");
     expect(nc3.san).toBe("Nc3");
-    expect(afterOpponent.pathKey).toBe(nf3.pathKey);
+    expect(afterOpponent.pathKey).toBe(e5.pathKey);
+    expect(afterOpponent.pathKey).not.toBe(nf3.pathKey);
   });
 });

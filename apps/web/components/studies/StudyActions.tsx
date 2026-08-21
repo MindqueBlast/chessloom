@@ -41,6 +41,8 @@ export function StudyActions({
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
   const [reimportOpen, setReimportOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [lichessRefreshOpen, setLichessRefreshOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const isLichessStudy = sourceType === "lichess_study";
 
@@ -83,13 +85,10 @@ export function StudyActions({
   }
 
   function remove() {
-    if (!window.confirm("Delete this study and all of its training data?")) {
-      return;
-    }
-
     startTransition(async () => {
       const result = await deleteStudyAction(studyId);
       if (result.ok) {
+        setDeleteOpen(false);
         if (result.warning) {
           toast.warning(result.warning);
         } else {
@@ -103,17 +102,10 @@ export function StudyActions({
   }
 
   function refreshFromLichess() {
-    if (
-      !window.confirm(
-        "Refresh this study from Lichess? Chapters and moves will be replaced. Training progress is kept only for positions with the same path in the updated study.",
-      )
-    ) {
-      return;
-    }
-
     startTransition(async () => {
       const result = await reimportLichessStudyAction(studyId);
       if (result.ok) {
+        setLichessRefreshOpen(false);
         toast.success(toastCopy.studyReimported);
         router.refresh();
       } else {
@@ -142,18 +134,42 @@ export function StudyActions({
       </form>
       <div className="flex flex-wrap gap-2">
         {isLichessStudy ? (
-          <Button
-            type="button"
-            disabled={pending || !lichessStudyUrl}
-            onClick={refreshFromLichess}
-          >
-            {pending ? (
-              <LoaderCircle className="animate-spin" />
-            ) : (
-              <RefreshCw />
-            )}
-            Refresh from Lichess
-          </Button>
+          <Dialog open={lichessRefreshOpen} onOpenChange={setLichessRefreshOpen}>
+            <DialogTrigger asChild>
+              <Button type="button" disabled={pending || !lichessStudyUrl}>
+                <RefreshCw />
+                Refresh from Lichess
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Refresh this study from Lichess?</DialogTitle>
+                <DialogDescription>
+                  Chapters and moves will be replaced. Training progress is kept
+                  only for positions with the same path in the updated study.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline" disabled={pending}>
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="button"
+                  disabled={pending}
+                  onClick={refreshFromLichess}
+                >
+                  {pending ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <RefreshCw />
+                  )}
+                  {pending ? "Refreshing…" : "Refresh study"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         ) : (
           <Dialog open={reimportOpen} onOpenChange={setReimportOpen}>
             <DialogTrigger asChild>
@@ -220,15 +236,43 @@ export function StudyActions({
           </Dialog>
         )}
 
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={remove}
-          disabled={pending}
-        >
-          <Trash2 />
-          Delete study
-        </Button>
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogTrigger asChild>
+            <Button type="button" variant="destructive" disabled={pending}>
+              <Trash2 />
+              Delete study
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Delete this study?</DialogTitle>
+              <DialogDescription>
+                This permanently removes the study and all of its training data.
+                This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={pending}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={pending}
+                onClick={remove}
+              >
+                {pending ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Trash2 />
+                )}
+                {pending ? "Deleting…" : "Delete study"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

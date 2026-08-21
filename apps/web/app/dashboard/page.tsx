@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { formatPathSan } from "@chessloom/chess-core";
 import {
   BookOpen,
   CalendarClock,
@@ -167,16 +168,26 @@ export default async function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-3xl font-semibold tabular-nums">
-                    {summary.weakPathKeys.length}
+                    {summary.weakPositions.length}
                   </p>
-                  <p
-                    className="mt-1 truncate font-mono text-xs text-muted-foreground"
-                    title={summary.weakPathKeys.slice(0, 3).join(", ")}
-                  >
-                    {summary.weakPathKeys.length > 0
-                      ? summary.weakPathKeys.slice(0, 3).join(" · ")
-                      : "No paths below 40% mastery"}
-                  </p>
+                  {summary.weakPositions.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {summary.weakPositions.slice(0, 3).map((entry) => (
+                        <li key={`${entry.studyId}:${entry.pathKey}`}>
+                          <Link
+                            href={`/studies/${entry.studyId}/learn?path=${encodeURIComponent(entry.pathKey)}`}
+                            className="text-foreground/80 underline-offset-2 hover:underline"
+                          >
+                            {formatPathSan(entry.pathKey)}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No paths below 40% mastery
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </StaggerItem>

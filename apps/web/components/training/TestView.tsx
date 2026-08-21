@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   buildTestSummary,
+  formatPathSan,
   parseTestCheckpoint,
   type TestState,
 } from "@chessloom/chess-core";
@@ -17,13 +18,14 @@ import {
 } from "lucide-react";
 
 import { ChessBoard } from "@/components/chess/ChessBoard";
-import { AnalysisPanel } from "@/components/engine/AnalysisPanel";
+import { LazyAnalysisPanel } from "@/components/engine/LazyAnalysisPanel";
 import { Button } from "@/components/ui/button";
 import {
   advanceTestAction,
   revealTestExpectedAction,
   submitTestMoveAction,
 } from "@/lib/actions/training";
+import { useSound } from "@/lib/sound/useSound";
 import { applyResolvedMoveCheckpoint } from "@/lib/training/session";
 import {
   SESSION_SIDE_MODES,
@@ -56,6 +58,7 @@ export function TestView({
   sessionId: string;
   initialCheckpoint: TestState;
 }) {
+  const { play } = useSound();
   const [checkpoint, setCheckpoint] = useState(initialCheckpoint);
   const [boardFen, setBoardFen] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
@@ -82,13 +85,15 @@ export function TestView({
       return;
     }
     announcedComplete.current = true;
+    play("sessionComplete");
     toast.success(toastCopy.sessionCompleted);
-  }, [checkpoint.status]);
+  }, [checkpoint.status, play]);
 
   function retry() {
     setFeedback(null);
     setExpected([]);
     setBoardFen(null);
+    setAwaitingAdvance(false);
   }
 
   function applyCheckpoint(nextCheckpoint: unknown) {
@@ -137,6 +142,7 @@ export function TestView({
     setExpected([]);
     const movedFen = applyUciToFen(currentCard.fen, uci);
     if (movedFen) setBoardFen(movedFen);
+    play("move");
 
     startTransition(async () => {
       try {
@@ -147,9 +153,11 @@ export function TestView({
         });
         if (result.ok) {
           applyCheckpoint(result.checkpoint);
+          play("correct");
           setFeedback({ kind: "correct", animate });
         } else {
           setAwaitingAdvance(true);
+          play("incorrect");
           setFeedback({ kind: "incorrect", animate });
         }
       } catch (error) {
@@ -172,6 +180,7 @@ export function TestView({
           currentCard.pathKey,
         );
         setExpected(result.sans);
+        play("reveal");
         setFeedback({ kind: "incorrect", animate });
       } catch (error) {
         const message =
@@ -226,9 +235,16 @@ export function TestView({
         {summary.weakPathKeys.length > 0 ? (
           <div className="rounded-xl border bg-card p-4">
             <h2 className="text-sm font-medium">Weak positions</h2>
-            <ul className="mt-3 space-y-1 font-mono text-xs text-muted-foreground">
+            <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
               {summary.weakPathKeys.map((pathKey) => (
-                <li key={pathKey}>{pathKey}</li>
+                <li key={pathKey}>
+                  <Link
+                    href={`/studies/${studyId}/learn?fresh=1`}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    {formatPathSan(pathKey)}
+                  </Link>
+                </li>
               ))}
             </ul>
           </div>
@@ -288,7 +304,7 @@ export function TestView({
             {testTitle(checkpoint.mode)}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Find a move from your repertoire.
+            {currentCard ? formatPathSan(currentCard.pathKey) : "Find a move from your repertoire."}
           </p>
         </div>
 
@@ -321,7 +337,9 @@ export function TestView({
           animate={feedback?.animate}
         />
 
-        {displayFen ? <AnalysisPanel fen={displayFen} /> : null}
+        {displayFen ? (
+          <LazyAnalysisPanel fen={displayFen} color={checkpoint.side} />
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           {pending ? (

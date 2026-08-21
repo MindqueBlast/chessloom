@@ -489,6 +489,47 @@ describe("createInitialTrainingCheckpoint", () => {
       queue: [{ pathKey: "c0:e2e4" }],
     });
   });
+
+  it("queues weak and new positions in study_ahead mode", () => {
+    const now = new Date("2026-08-20T12:00:00.000Z");
+    expect(
+      createInitialTrainingCheckpoint(
+        "practice",
+        tree,
+        "both",
+        [
+          {
+            path_key: "c0:",
+            attempts: 3,
+            correct_count: 3,
+            streak: 3,
+            mastery: 80,
+            last_reviewed_at: "2026-08-20T11:00:00.000Z",
+            due_at: "2026-08-22T12:00:00.000Z",
+            ...defaultFsrsRow,
+            fsrs_stability: 5,
+            fsrs_state: 2,
+          },
+          {
+            path_key: "c0:e2e4",
+            attempts: 2,
+            correct_count: 0,
+            streak: 0,
+            mastery: 18,
+            last_reviewed_at: "2026-08-19T12:00:00.000Z",
+            due_at: "2026-08-22T12:00:00.000Z",
+            ...defaultFsrsRow,
+            fsrs_stability: 1,
+            fsrs_state: 2,
+          },
+        ],
+        now,
+        "study_ahead",
+      ),
+    ).toMatchObject({
+      queue: [{ pathKey: "c0:e2e4" }],
+    });
+  });
 });
 
 describe("createInitialTestCheckpoint", () => {

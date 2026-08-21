@@ -42,6 +42,17 @@ function isTestSideMode(value: unknown): value is TestState["sideMode"] {
   return value === "white" || value === "black" || value === "both";
 }
 
+function isPracticeSideMode(
+  value: unknown,
+): value is PracticeState["sideMode"] {
+  return (
+    value === "white" ||
+    value === "black" ||
+    value === "both" ||
+    value === "random"
+  );
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
@@ -95,6 +106,16 @@ export function parsePracticeCheckpoint(json: string): PracticeState {
     !isSide(value.side) ||
     !isStatus(value.status)
   ) {
+    throw new Error("Invalid practice checkpoint");
+  }
+  // Legacy checkpoints omit sideMode; default from resolved side.
+  if (value.sideMode === undefined) {
+    return {
+      ...(value as unknown as PracticeState),
+      sideMode: value.side as PracticeState["side"],
+    };
+  }
+  if (!isPracticeSideMode(value.sideMode)) {
     throw new Error("Invalid practice checkpoint");
   }
   return value as unknown as PracticeState;

@@ -72,6 +72,11 @@ export function buildDashboardSummary(
 ): {
   dueCount: number;
   weakPathKeys: string[];
+  weakPositions: Array<{
+    studyId: string;
+    pathKey: string;
+    mastery: number;
+  }>;
   studies: StudySummary[];
 } {
   const progressByPosition = new Map(
@@ -81,7 +86,11 @@ export function buildDashboardSummary(
     nodes.flatMap((node) => (node.parent_id ? [node.parent_id] : [])),
   );
   const nowIso = now.toISOString();
-  const weakPositions: Array<{ pathKey: string; mastery: number }> = [];
+  const weakPositions: Array<{
+    studyId: string;
+    pathKey: string;
+    mastery: number;
+  }> = [];
   let dueCount = 0;
 
   const summaries = studies.map((study) => {
@@ -101,7 +110,11 @@ export function buildDashboardSummary(
       }
       if (mastery < 40) {
         studyWeakCount += 1;
-        weakPositions.push({ pathKey: node.path_key, mastery });
+        weakPositions.push({
+          studyId: study.id,
+          pathKey: node.path_key,
+          mastery,
+        });
       }
     }
 
@@ -130,6 +143,7 @@ export function buildDashboardSummary(
   return {
     dueCount,
     weakPathKeys: weakPositions.map(({ pathKey }) => pathKey),
+    weakPositions,
     studies: summaries,
   };
 }

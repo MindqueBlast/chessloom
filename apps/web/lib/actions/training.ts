@@ -6,6 +6,7 @@ import {
   findNodeByPathKey,
   learnApplyUserMove,
   learnAutoOpponentIfNeeded,
+  learnSelectChild,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
   parseTestCheckpoint,
@@ -333,6 +334,7 @@ export type TrainingSessionStartOptions = {
   chapterIndex?: number;
   sideMode?: SideMode;
   n?: number;
+  queueMode?: import("./training-helpers").PracticeQueueMode;
 };
 
 export async function startTrainingSessionAction(
@@ -390,6 +392,8 @@ export async function startTrainingSessionAction(
             chapters,
             sideMode,
             progressRows,
+            new Date(),
+            options.queueMode ?? "due",
           )
         : mode === "random_test"
           ? createInitialTestCheckpoint(
@@ -612,6 +616,32 @@ export async function submitLearnMoveAction(input: {
     progress: committed.progress,
     checkpoint: committed.checkpoint,
   };
+}
+
+export async function selectLearnBranchAction(input: {
+  sessionId: string;
+  pathKey: string;
+  uci: string;
+}): Promise<{ checkpoint: unknown }> {
+  const client = await createClient();
+  const { session } = await ownedSession(client, input.sessionId, "learn");
+  const state = learnState(session.checkpoint);
+  if (state.pathKey !== input.pathKey) {
+    throw new Error("Branch does not match the current learn position");
+  }
+
+  const chapters = await studyChapters(client, session.study_id);
+  const chapter = chapters.find(
+    (candidate) => candidate.index === state.chapterIndex,
+  );
+  if (!chapter || !findNodeByPathKey(chapter, input.pathKey)) {
+    throw new Error(`Training position was not found: ${input.pathKey}`);
+  }
+
+  const selected = learnSelectChild(state, chapter, { uci: input.uci });
+  const nextState = learnAutoOpponentIfNeeded(selected, chapter);
+  const checkpoint = await saveSession(session, nextState);
+  return { checkpoint };
 }
 
 export async function saveCheckpointAction(

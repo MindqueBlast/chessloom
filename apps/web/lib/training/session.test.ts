@@ -105,6 +105,7 @@ describe("restorable checkpoints", () => {
     index: 0,
     revealed: true,
     side: "white" as const,
+    sideMode: "white" as const,
     status: "active" as const,
   };
 
@@ -151,11 +152,12 @@ describe("applyResolvedMoveCheckpoint", () => {
           index: 0,
           revealed: false,
           side: "white",
+          sideMode: "white",
           status: "active",
         },
         parsePracticeCheckpoint,
       ),
-    ).toMatchObject({ index: 0, revealed: false });
+    ).toMatchObject({ index: 0, revealed: false, sideMode: "white" });
     expect(serializeCheckpoint(checkpoint)).toContain("c0:e2e4");
   });
 });
