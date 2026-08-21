@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   deleteStudyAction,
+  reimportLichessStudyAction,
   reimportPgnAction,
   renameStudyAction,
 } from "@/lib/actions/studies";
@@ -29,14 +30,19 @@ import { toastCopy } from "@/lib/toasts";
 export function StudyActions({
   studyId,
   initialTitle,
+  sourceType,
+  lichessStudyUrl,
 }: {
   studyId: string;
   initialTitle: string;
+  sourceType: string;
+  lichessStudyUrl?: string | null;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
   const [reimportOpen, setReimportOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const isLichessStudy = sourceType === "lichess_study";
 
   function rename(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,6 +102,26 @@ export function StudyActions({
     });
   }
 
+  function refreshFromLichess() {
+    if (
+      !window.confirm(
+        "Refresh this study from Lichess? Chapters and moves will be replaced. Training progress is kept only for positions with the same path in the updated study.",
+      )
+    ) {
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await reimportLichessStudyAction(studyId);
+      if (result.ok) {
+        toast.success(toastCopy.studyReimported);
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
       <form onSubmit={rename} className="space-y-2">
@@ -115,65 +141,84 @@ export function StudyActions({
         </div>
       </form>
       <div className="flex flex-wrap gap-2">
-        <Dialog open={reimportOpen} onOpenChange={setReimportOpen}>
-          <DialogTrigger asChild>
-            <Button type="button" variant="outline" disabled={pending}>
+        {isLichessStudy ? (
+          <Button
+            type="button"
+            disabled={pending || !lichessStudyUrl}
+            onClick={refreshFromLichess}
+          >
+            {pending ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
               <RefreshCw />
-              Reimport PGN
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <form onSubmit={reimport} className="contents">
-              <DialogHeader>
-                <DialogTitle>Replace this study&apos;s PGN?</DialogTitle>
-                <DialogDescription>
-                  Chapters and moves will be replaced. Training progress is
-                  kept only for positions with the same path in the new PGN.
-                  If the import fails, the current study remains unchanged.
-                </DialogDescription>
-              </DialogHeader>
+            )}
+            Refresh from Lichess
+          </Button>
+        ) : (
+          <Dialog open={reimportOpen} onOpenChange={setReimportOpen}>
+            <DialogTrigger asChild>
+              <Button type="button" variant="outline" disabled={pending}>
+                <RefreshCw />
+                Reimport PGN
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <form onSubmit={reimport} className="contents">
+                <DialogHeader>
+                  <DialogTitle>Replace this study&apos;s PGN?</DialogTitle>
+                  <DialogDescription>
+                    Chapters and moves will be replaced. Training progress is
+                    kept only for positions with the same path in the new PGN.
+                    If the import fails, the current study remains unchanged.
+                  </DialogDescription>
+                </DialogHeader>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reimport-pgn-text">Paste replacement PGN</Label>
-                  <Textarea
-                    id="reimport-pgn-text"
-                    name="reimportPgnText"
-                    placeholder={'[Event "Updated repertoire"]\n\n1. e4 e5 *'}
-                    className="min-h-40 font-mono"
-                    disabled={pending}
-                  />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reimport-pgn-text">
+                      Paste replacement PGN
+                    </Label>
+                    <Textarea
+                      id="reimport-pgn-text"
+                      name="reimportPgnText"
+                      placeholder={'[Event "Updated repertoire"]\n\n1. e4 e5 *'}
+                      className="min-h-40 font-mono"
+                      disabled={pending}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reimport-pgn-file">
+                      Or choose a PGN file
+                    </Label>
+                    <Input
+                      id="reimport-pgn-file"
+                      name="reimportPgnFile"
+                      type="file"
+                      accept=".pgn,application/x-chess-pgn,text/plain"
+                      disabled={pending}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reimport-pgn-file">Or choose a PGN file</Label>
-                  <Input
-                    id="reimport-pgn-file"
-                    name="reimportPgnFile"
-                    type="file"
-                    accept=".pgn,application/x-chess-pgn,text/plain"
-                    disabled={pending}
-                  />
-                </div>
-              </div>
 
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline" disabled={pending}>
-                    Cancel
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={pending}>
+                      Cancel
+                    </Button>
+                  </DialogClose>
+                  <Button type="submit" disabled={pending}>
+                    {pending ? (
+                      <LoaderCircle className="animate-spin" />
+                    ) : (
+                      <FileUp />
+                    )}
+                    {pending ? "Reimporting…" : "Replace study"}
                   </Button>
-                </DialogClose>
-                <Button type="submit" disabled={pending}>
-                  {pending ? (
-                    <LoaderCircle className="animate-spin" />
-                  ) : (
-                    <FileUp />
-                  )}
-                  {pending ? "Reimporting…" : "Replace study"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
 
         <Button
           type="button"

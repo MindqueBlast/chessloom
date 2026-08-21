@@ -27,10 +27,21 @@ type ChapterSummary = {
   trainableCount: number;
 };
 
+function sourceBadgeLabel(sourceType: string) {
+  if (sourceType === "lichess_study") {
+    return "Lichess study";
+  }
+  if (sourceType === "pgn_upload") {
+    return "Stored PGN";
+  }
+  return "Imported PGN";
+}
+
 export function StudyOverview({
   studyId,
   title,
   sourceType,
+  lichessStudyUrl,
   createdAt,
   defaultSideMode,
   chapterCount,
@@ -40,6 +51,7 @@ export function StudyOverview({
   studyId: string;
   title: string;
   sourceType: string;
+  lichessStudyUrl: string | null;
   createdAt: string;
   defaultSideMode: DefaultSideMode;
   chapterCount: number;
@@ -56,9 +68,7 @@ export function StudyOverview({
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="mb-3 flex items-center gap-2">
-            <Badge variant="secondary">
-              {sourceType === "pgn_upload" ? "Stored PGN" : "Imported PGN"}
-            </Badge>
+            <Badge variant="secondary">{sourceBadgeLabel(sourceType)}</Badge>
             <span className="text-xs text-muted-foreground">
               {new Intl.DateTimeFormat("en", {
                 dateStyle: "medium",
@@ -124,12 +134,18 @@ export function StudyOverview({
         <CardHeader>
           <CardTitle>Manage study</CardTitle>
           <CardDescription>
-            Rename, replace the PGN while preserving matching progress, or
-            permanently remove the study.
+            {sourceType === "lichess_study"
+              ? "Rename, refresh from Lichess while preserving matching progress, or permanently remove the study."
+              : "Rename, replace the PGN while preserving matching progress, or permanently remove the study."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <StudyActions studyId={studyId} initialTitle={title} />
+          <StudyActions
+            studyId={studyId}
+            initialTitle={title}
+            sourceType={sourceType}
+            lichessStudyUrl={lichessStudyUrl}
+          />
         </CardContent>
       </Card>
 
