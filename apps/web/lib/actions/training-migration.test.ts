@@ -12,6 +12,10 @@ const fsrsPath = resolve(
   migrationsDir,
   "20260821140000_fsrs_progress.sql",
 );
+const testModesPath = resolve(
+  migrationsDir,
+  "20260821150000_test_session_modes.sql",
+);
 
 describe("training authority migration", () => {
   it("makes scoring and checkpoint writes service-only and atomic", async () => {
@@ -100,5 +104,25 @@ describe("FSRS progress migration", () => {
 
     expect(authority).toMatch(/mastery \+ 8|mastery - 15/);
     expect(sql).not.toMatch(/mastery \+ 8|mastery - 15/);
+  });
+});
+
+describe("test session modes migration", () => {
+  it("allows random_test and full_test training session modes", async () => {
+    const [sql, files] = await Promise.all([
+      readFile(testModesPath, "utf8"),
+      readdir(migrationsDir),
+    ]);
+    const ordered = [...files].filter((name) => name.endsWith(".sql")).sort();
+
+    expect(ordered.indexOf("20260821140000_fsrs_progress.sql")).toBeLessThan(
+      ordered.indexOf("20260821150000_test_session_modes.sql"),
+    );
+    expect(sql).toContain(
+      "drop constraint if exists training_sessions_mode_check",
+    );
+    expect(sql).toContain(
+      "check (mode in ('learn', 'practice', 'random_test', 'full_test'))",
+    );
   });
 });

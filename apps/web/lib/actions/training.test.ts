@@ -11,6 +11,7 @@ import {
   resumeSessionAction,
   revealPracticeExpectedAction,
   saveCheckpointAction,
+  startTrainingSessionAction,
   submitPracticeMoveAction,
 } from "./training";
 
@@ -319,5 +320,272 @@ describe("authoritative practice actions", () => {
 
     await expect(resumeSessionAction("study-1", "practice")).resolves.toBeNull();
     expect(fixture.wasAbandoned()).toBe(true);
+  });
+});
+
+function startSessionFixture() {
+  let insertedMode: string | null = null;
+  let insertedCheckpoint: unknown = null;
+
+  const userClient = {
+    auth: {
+      getUser: vi.fn(async () => ({
+        data: { user: { id: "user-1" } },
+        error: null,
+      })),
+    },
+    from: vi.fn((table: string) => {
+      if (table === "studies") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({ data: { id: "study-1" }, error: null })),
+            })),
+          })),
+        };
+      }
+      if (table === "profiles") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: { default_side_mode: "both" },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+      if (table === "chapters") {
+        return {
+          select: vi.fn(() =>
+            query(() => ({
+              data: [
+                {
+                  id: "chapter-1",
+                  chapter_index: 0,
+                  name: "Line",
+                  initial_fen:
+                    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                  headers: {},
+                },
+              ],
+              error: null,
+            })),
+          ),
+          eq: vi.fn(() => ({
+            order: vi.fn(async () => ({
+              data: [
+                {
+                  id: "chapter-1",
+                  chapter_index: 0,
+                  name: "Line",
+                  initial_fen:
+                    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                  headers: {},
+                },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+      if (table === "nodes") {
+        return {
+          select: vi.fn(() =>
+            query(() => ({
+              data: [
+                {
+                  id: "root",
+                  chapter_id: "chapter-1",
+                  parent_id: null,
+                  path_key: "c0:",
+                  fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                  san: null,
+                  uci: null,
+                  ply: 0,
+                  comment: null,
+                  nags: [],
+                },
+                {
+                  id: "child",
+                  chapter_id: "chapter-1",
+                  parent_id: "root",
+                  path_key: "c0:e2e4",
+                  fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                  san: "e4",
+                  uci: "e2e4",
+                  ply: 1,
+                  comment: null,
+                  nags: [],
+                },
+                {
+                  id: "reply",
+                  chapter_id: "chapter-1",
+                  parent_id: "child",
+                  path_key: "c0:e2e4.e7e5",
+                  fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                  san: "e5",
+                  uci: "e7e5",
+                  ply: 2,
+                  comment: null,
+                  nags: [],
+                },
+              ],
+              error: null,
+            })),
+          ),
+          eq: vi.fn(() => ({
+            order: vi.fn(async () => ({
+              data: [
+                {
+                  id: "root",
+                  chapter_id: "chapter-1",
+                  parent_id: null,
+                  path_key: "c0:",
+                  fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                  san: null,
+                  uci: null,
+                  ply: 0,
+                  comment: null,
+                  nags: [],
+                },
+                {
+                  id: "child",
+                  chapter_id: "chapter-1",
+                  parent_id: "root",
+                  path_key: "c0:e2e4",
+                  fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                  san: "e4",
+                  uci: "e2e4",
+                  ply: 1,
+                  comment: null,
+                  nags: [],
+                },
+                {
+                  id: "reply",
+                  chapter_id: "chapter-1",
+                  parent_id: "child",
+                  path_key: "c0:e2e4.e7e5",
+                  fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                  san: "e5",
+                  uci: "e7e5",
+                  ply: 2,
+                  comment: null,
+                  nags: [],
+                },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+      if (table === "position_progress") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(async () => ({
+              data: [
+                {
+                  path_key: "c0:e2e4",
+                  attempts: 1,
+                  correct_count: 0,
+                  streak: 0,
+                  mastery: 12,
+                  last_reviewed_at: "2026-08-20T10:00:00.000Z",
+                  due_at: "2026-08-20T10:00:00.000Z",
+                  fsrs_stability: 0,
+                  fsrs_difficulty: 0,
+                  fsrs_elapsed_days: 0,
+                  fsrs_scheduled_days: 0,
+                  fsrs_reps: 0,
+                  fsrs_lapses: 0,
+                  fsrs_state: 0,
+                  fsrs_learning_steps: 0,
+                  fsrs_last_review: null,
+                },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    }),
+  };
+
+  const serviceClient = {
+    from: vi.fn((table: string) => {
+      if (table !== "training_sessions") {
+        throw new Error(`Unexpected service table ${table}`);
+      }
+      return {
+        insert: vi.fn((values: Row) => {
+          insertedMode = values.mode as string;
+          insertedCheckpoint = values.checkpoint;
+          return {
+            select: vi.fn(() => ({
+              single: vi.fn(async () => ({ data: { id: "session-test" }, error: null })),
+            })),
+          };
+        }),
+      };
+    }),
+  };
+
+  return {
+    userClient,
+    serviceClient,
+    getInsertedMode: () => insertedMode,
+    getInsertedCheckpoint: () => insertedCheckpoint,
+  };
+}
+
+describe("startTrainingSessionAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-20T12:30:00.000Z"));
+  });
+
+  it("starts a random test session with progress-aware queue and mode", async () => {
+    const fixture = startSessionFixture();
+    createClient.mockResolvedValue(fixture.userClient);
+    createServiceClient.mockReturnValue(fixture.serviceClient);
+
+    const result = await startTrainingSessionAction("study-1", "random_test", {
+      n: 10,
+      sideMode: "both",
+    });
+
+    expect(result.sessionId).toBe("session-test");
+    expect(fixture.getInsertedMode()).toBe("random_test");
+    expect(fixture.getInsertedCheckpoint()).toMatchObject({
+      mode: "random_test",
+      targetCount: 10,
+      queue: [{ pathKey: "c0:" }, { pathKey: "c0:e2e4" }],
+      correctCount: 0,
+      incorrectCount: 0,
+      weakPathKeys: [],
+      status: "active",
+    });
+  });
+
+  it("starts a full test session with every trainable position", async () => {
+    const fixture = startSessionFixture();
+    createClient.mockResolvedValue(fixture.userClient);
+    createServiceClient.mockReturnValue(fixture.serviceClient);
+
+    const result = await startTrainingSessionAction("study-1", "full_test", {
+      sideMode: "both",
+    });
+
+    expect(result.sessionId).toBe("session-test");
+    expect(fixture.getInsertedMode()).toBe("full_test");
+    expect(fixture.getInsertedCheckpoint()).toMatchObject({
+      mode: "full_test",
+      queue: [{ pathKey: "c0:" }, { pathKey: "c0:e2e4" }],
+      status: "active",
+    });
+    expect(fixture.getInsertedCheckpoint()).not.toHaveProperty("targetCount");
   });
 });

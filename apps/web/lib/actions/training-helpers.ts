@@ -1,11 +1,16 @@
 import {
+  buildFullTestQueue,
+  buildRandomTestQueue,
+  clampRandomTestN,
   createFsrsScheduler,
   createInitialFsrsProgress,
   learnAutoOpponentIfNeeded,
   migrateLightweightToFsrs,
   parseLearnCheckpoint,
   parsePracticeCheckpoint,
+  resolveTrainingSide,
   serializeCheckpoint,
+  sideToMove,
   startLearn,
   startPractice,
   type LearnState,
@@ -14,6 +19,8 @@ import {
   type PositionProgress,
   type SideMode,
   type SessionMode,
+  type TestCard,
+  type TestState,
   type TreeNode,
 } from "@chessloom/chess-core";
 
@@ -332,6 +339,18 @@ export function resolveLearnChapter(
   return chapter;
 }
 
+export function collectTrainableCards(chapters: ChapterTree[]): TestCard[] {
+  const cards: TestCard[] = [];
+  const collect = (node: TreeNode) => {
+    if (node.children.length > 0) {
+      cards.push({ pathKey: node.pathKey, fen: node.fen });
+    }
+    node.children.forEach(collect);
+  };
+  chapters.forEach((chapter) => collect(chapter.root));
+  return cards;
+}
+
 export function createInitialTrainingCheckpoint(
   mode: "learn",
   chapters: ChapterTree[],
@@ -380,15 +399,76 @@ export function createInitialTrainingCheckpoint(
     throw new Error("This study has no chapters to train");
   }
 
-  const cards: Array<{ pathKey: string; fen: string }> = [];
-  const collect = (node: TreeNode) => {
-    if (node.children.length > 0) {
-      cards.push({ pathKey: node.pathKey, fen: node.fen });
-    }
-    node.children.forEach(collect);
+  return startPractice(
+    buildPracticeQueue(collectTrainableCards(chapters), progressRows, now),
+    sideMode,
+  );
+}
+
+export function createInitialTestCheckpoint(
+  mode: "random_test" | "full_test",
+  chapters: ChapterTree[],
+  sideMode: SideMode,
+  progressRows: PracticeProgressRow[] = [],
+  options: { n?: number; now?: Date; rng?: () => number } = {},
+): TestState {
+  const now = options.now ?? new Date();
+  const rng = options.rng ?? Math.random;
+
+  if (chapters.length === 0) {
+    throw new Error("This study has no chapters to train");
+  }
+
+  const side = resolveTrainingSide(sideMode, rng);
+  const effectiveSideMode: TestState["sideMode"] =
+    sideMode === "both" ? "both" : side;
+  const cards =
+    effectiveSideMode === "both"
+      ? collectTrainableCards(chapters)
+      : collectTrainableCards(chapters).filter(
+          (card) => sideToMove(card.fen) === side,
+        );
+  const progress = progressRows.map((row) =>
+    progressFromRowMigrating(row.path_key, row, now),
+  );
+
+  if (mode === "random_test") {
+    const targetCount = clampRandomTestN(options.n ?? Number.NaN);
+    const queue = buildRandomTestQueue(
+      cards,
+      progress,
+      targetCount,
+      now,
+      rng,
+    );
+    return {
+      mode,
+      queue,
+      index: 0,
+      revealed: false,
+      side,
+      sideMode: effectiveSideMode,
+      status: queue.length === 0 ? "complete" : "active",
+      targetCount,
+      correctCount: 0,
+      incorrectCount: 0,
+      weakPathKeys: [],
+    };
+  }
+
+  const queue = buildFullTestQueue(cards);
+  return {
+    mode,
+    queue,
+    index: 0,
+    revealed: false,
+    side,
+    sideMode: effectiveSideMode,
+    status: queue.length === 0 ? "complete" : "active",
+    correctCount: 0,
+    incorrectCount: 0,
+    weakPathKeys: [],
   };
-  chapters.forEach((chapter) => collect(chapter.root));
-  return startPractice(buildPracticeQueue(cards, progressRows, now), sideMode);
 }
 
 export function buildPracticeQueue(

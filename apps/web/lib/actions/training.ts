@@ -30,6 +30,7 @@ import {
 import {
   assertSessionUsable,
   buildChapterTrees,
+  createInitialTestCheckpoint,
   createInitialTrainingCheckpoint,
   normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
@@ -270,6 +271,7 @@ function learnState(checkpoint: unknown): LearnState {
 export type TrainingSessionStartOptions = {
   chapterIndex?: number;
   sideMode?: SideMode;
+  n?: number;
 };
 
 export async function startTrainingSessionAction(
@@ -298,18 +300,21 @@ export async function startTrainingSessionAction(
   const sideMode =
     options.sideMode ??
     normalizeTrainingSideMode(profile?.default_side_mode);
-  const [chapters, progressResult] = await Promise.all([
-    studyChapters(client, studyId),
-    mode === "practice"
+  const progressRowsPromise =
+    mode === "practice" || mode === "random_test"
       ? client
           .from("position_progress")
           .select(`path_key,${PROGRESS_ROW_SELECT}`)
           .eq("study_id", studyId)
-      : Promise.resolve({ data: [], error: null }),
+      : Promise.resolve({ data: [], error: null });
+  const [chapters, progressResult] = await Promise.all([
+    studyChapters(client, studyId),
+    progressRowsPromise,
   ]);
   if (progressResult.error) {
     throw new Error(progressResult.error.message);
   }
+  const progressRows = (progressResult.data ?? []) as PracticeProgressRow[];
   const checkpoint =
     mode === "learn"
       ? createInitialTrainingCheckpoint(
@@ -318,12 +323,22 @@ export async function startTrainingSessionAction(
           sideMode,
           options.chapterIndex,
         )
-      : createInitialTrainingCheckpoint(
-          "practice",
-          chapters,
-          sideMode,
-          (progressResult.data ?? []) as PracticeProgressRow[],
-        );
+      : mode === "practice"
+        ? createInitialTrainingCheckpoint(
+            "practice",
+            chapters,
+            sideMode,
+            progressRows,
+          )
+        : mode === "random_test"
+          ? createInitialTestCheckpoint(
+              "random_test",
+              chapters,
+              sideMode,
+              progressRows,
+              { n: options.n },
+            )
+          : createInitialTestCheckpoint("full_test", chapters, sideMode);
   const safeCheckpoint = jsonValue(checkpoint);
   const serviceClient = createServiceClient();
   const { data, error } = await serviceClient

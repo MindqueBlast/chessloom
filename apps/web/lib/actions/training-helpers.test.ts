@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertSessionUsable,
   buildChapterTrees,
+  createInitialTestCheckpoint,
   createInitialTrainingCheckpoint,
   normalizeTrainingSideMode,
   parseClientCheckpointUpdate,
@@ -486,6 +487,129 @@ describe("createInitialTrainingCheckpoint", () => {
       ], now),
     ).toMatchObject({
       queue: [{ pathKey: "c0:e2e4" }],
+    });
+  });
+});
+
+describe("createInitialTestCheckpoint", () => {
+  const tree = buildChapterTrees(
+    [
+      {
+        id: "chapter-1",
+        chapter_index: 0,
+        name: "Main line",
+        initial_fen:
+          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        headers: {},
+      },
+    ],
+    [
+      {
+        id: "root",
+        chapter_id: "chapter-1",
+        parent_id: null,
+        path_key: "c0:",
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        san: null,
+        uci: null,
+        ply: 0,
+        comment: null,
+        nags: [],
+      },
+      {
+        id: "child",
+        chapter_id: "chapter-1",
+        parent_id: "root",
+        path_key: "c0:e2e4",
+        fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        san: "e4",
+        uci: "e2e4",
+        ply: 1,
+        comment: null,
+        nags: [],
+      },
+      {
+        id: "reply",
+        chapter_id: "chapter-1",
+        parent_id: "child",
+        path_key: "c0:e2e4.e7e5",
+        fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        san: "e5",
+        uci: "e7e5",
+        ply: 2,
+        comment: null,
+        nags: [],
+      },
+    ],
+  );
+  const now = new Date("2026-08-20T12:00:00.000Z");
+
+  it("builds a full test queue in chapter order with side filtering", () => {
+    expect(
+      createInitialTestCheckpoint("full_test", tree, "both"),
+    ).toMatchObject({
+      mode: "full_test",
+      queue: [{ pathKey: "c0:" }, { pathKey: "c0:e2e4" }],
+      index: 0,
+      revealed: false,
+      sideMode: "both",
+      status: "active",
+      correctCount: 0,
+      incorrectCount: 0,
+      weakPathKeys: [],
+    });
+  });
+
+  it("resolves random side once and clamps random test size", () => {
+    expect(
+      createInitialTestCheckpoint("random_test", tree, "random", [], {
+        n: 99,
+        now,
+        rng: () => 0,
+      }),
+    ).toMatchObject({
+      mode: "random_test",
+      side: "white",
+      sideMode: "white",
+      targetCount: 50,
+      queue: [{ pathKey: "c0:" }],
+      status: "active",
+    });
+  });
+
+  it("returns every trainable card when the study is smaller than N", () => {
+    expect(
+      createInitialTestCheckpoint(
+        "random_test",
+        tree,
+        "both",
+        [
+          {
+            path_key: "c0:",
+            attempts: 2,
+            correct_count: 2,
+            streak: 2,
+            mastery: 64,
+            last_reviewed_at: "2026-08-20T12:00:00.000Z",
+            due_at: "2026-08-21T12:00:00.000Z",
+            ...defaultFsrsRow,
+          },
+          {
+            path_key: "c0:e2e4",
+            attempts: 1,
+            correct_count: 0,
+            streak: 0,
+            mastery: 12,
+            last_reviewed_at: "2026-08-20T10:00:00.000Z",
+            due_at: "2026-08-20T10:00:00.000Z",
+            ...defaultFsrsRow,
+          },
+        ],
+        { n: 1, now, rng: () => 0.5 },
+      ),
+    ).toMatchObject({
+      queue: [{ pathKey: "c0:" }, { pathKey: "c0:e2e4" }],
+      targetCount: 5,
     });
   });
 });
