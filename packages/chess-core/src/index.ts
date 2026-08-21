@@ -7,6 +7,7 @@ export * from "./srs/types.js";
 export * from "./training/checkpoint.js";
 export * from "./training/learn.js";
 export * from "./training/practice.js";
+export * from "./training/test-modes.js";
 export * from "./training/side.js";
 export * from "./tree/match.js";
 export * from "./types.js";

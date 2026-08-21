@@ -1,11 +1,12 @@
 import type { LearnState } from "./learn.js";
 import type { PracticeCard, PracticeState } from "./practice.js";
+import type { TestCard, TestState } from "./test-modes.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseJson(json: string, kind: "learn" | "practice"): unknown {
+function parseJson(json: string, kind: "learn" | "practice" | "test"): unknown {
   try {
     return JSON.parse(json);
   } catch {
@@ -27,6 +28,26 @@ function isPracticeCard(value: unknown): value is PracticeCard {
     typeof value.pathKey === "string" &&
     typeof value.fen === "string"
   );
+}
+
+function isTestCard(value: unknown): value is TestCard {
+  return isPracticeCard(value);
+}
+
+function isTestMode(value: unknown): value is TestState["mode"] {
+  return value === "random_test" || value === "full_test";
+}
+
+function isTestSideMode(value: unknown): value is TestState["sideMode"] {
+  return value === "white" || value === "black" || value === "both";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isNonNegativeInteger(value: unknown): boolean {
+  return Number.isInteger(value) && (value as number) >= 0;
 }
 
 export function serializeCheckpoint(input: unknown): string {
@@ -77,4 +98,31 @@ export function parsePracticeCheckpoint(json: string): PracticeState {
     throw new Error("Invalid practice checkpoint");
   }
   return value as unknown as PracticeState;
+}
+
+export function parseTestCheckpoint(json: string): TestState {
+  const value = parseJson(json, "test");
+  if (
+    !isRecord(value) ||
+    !isTestMode(value.mode) ||
+    !Array.isArray(value.queue) ||
+    !value.queue.every(isTestCard) ||
+    !Number.isInteger(value.index) ||
+    (value.index as number) < 0 ||
+    (value.index as number) > value.queue.length ||
+    typeof value.revealed !== "boolean" ||
+    !isSide(value.side) ||
+    !isTestSideMode(value.sideMode) ||
+    !isStatus(value.status) ||
+    !isNonNegativeInteger(value.correctCount) ||
+    !isNonNegativeInteger(value.incorrectCount) ||
+    !isStringArray(value.weakPathKeys) ||
+    (value.targetCount !== undefined &&
+      (!Number.isInteger(value.targetCount) ||
+        (value.targetCount as number) < 5 ||
+        (value.targetCount as number) > 50))
+  ) {
+    throw new Error("Invalid test checkpoint");
+  }
+  return value as unknown as TestState;
 }

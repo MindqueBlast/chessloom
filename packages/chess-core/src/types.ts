@@ -50,4 +50,8 @@ export interface PositionProgress {
 }
 
 export type SideMode = "white" | "black" | "both" | "random";
-export type SessionMode = "learn" | "practice";
+export type SessionMode =
+  | "learn"
+  | "practice"
+  | "random_test"
+  | "full_test";
