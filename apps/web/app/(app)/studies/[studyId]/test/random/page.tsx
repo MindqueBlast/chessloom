@@ -54,7 +54,7 @@ export default async function RandomTestPage({
   );
 
   if (start.fresh || start.sideMode || start.n !== undefined) {
-    redirect(testPath(studyId, "random", { n: start.n }));
+    redirect(testPath(studyId, "random"));
   }
 
   const checkpoint = parseTestCheckpoint(
