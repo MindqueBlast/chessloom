@@ -12,3 +12,7 @@ coverage
 .superpowers/
 .vercel/
 
+.vercel
+.env*
+
+apps/web/public/stockfish/
