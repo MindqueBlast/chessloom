@@ -315,7 +315,7 @@ export async function deleteStudyAction(
       .from("pgns")
       .remove([storagePath]);
 
-    if (!isMissingStorageObject(storageError)) {
+    if (storageError && !isMissingStorageObject(storageError)) {
       console.error("PGN storage cleanup failed:", storageError.message);
       return { ok: true, studyId, warning: toastCopy.studyDeletedStorageWarning };
     }
