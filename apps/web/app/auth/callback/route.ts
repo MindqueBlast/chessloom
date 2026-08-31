@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/route-handler";
 
 function safeNextPath(value: string | null) {
   return value?.startsWith("/") &&
@@ -16,25 +16,23 @@ function safeAuthEvent(value: string | null): string {
     : "confirmed";
 }
 
+function callbackErrorRedirect(request: NextRequest) {
+  return NextResponse.redirect(
+    new URL("/login?auth=callback-error", request.url),
+  );
+}
+
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get("code");
-  const next = safeNextPath(request.nextUrl.searchParams.get("next"));
-  const event = safeAuthEvent(request.nextUrl.searchParams.get("event"));
+  const { searchParams } = request.nextUrl;
+  const code = searchParams.get("code");
+  const oauthError = searchParams.get("error");
 
-  if (!code) {
-    return NextResponse.redirect(
-      new URL("/login?auth=callback-error", request.url),
-    );
+  if (oauthError || !code) {
+    return callbackErrorRedirect(request);
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-  if (error) {
-    return NextResponse.redirect(
-      new URL("/login?auth=callback-error", request.url),
-    );
-  }
+  const next = safeNextPath(searchParams.get("next"));
+  const event = safeAuthEvent(searchParams.get("event"));
 
   let destination = new URL(next, request.url);
 
@@ -44,5 +42,13 @@ export async function GET(request: NextRequest) {
 
   destination.searchParams.set("auth", event);
 
-  return NextResponse.redirect(destination);
+  const response = NextResponse.redirect(destination);
+  const supabase = createClient(request, response);
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (error) {
+    return callbackErrorRedirect(request);
+  }
+
+  return response;
 }

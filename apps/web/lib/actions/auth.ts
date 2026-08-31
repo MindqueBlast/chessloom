@@ -119,27 +119,6 @@ export async function requestPasswordReset(
   };
 }
 
-export async function signInWithGoogle(
-  _previousState: AuthActionState,
-  _formData: FormData,
-): Promise<AuthActionState> {
-  void _formData;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: await callbackUrl("/dashboard", "oauth"),
-    },
-  });
-
-  if (error || !data.url) {
-    return { error: error?.message ?? "Google sign-in could not be started." };
-  }
-
-  redirect(data.url);
-}
-
 export async function updatePassword(
   _previousState: AuthActionState,
   formData: FormData,

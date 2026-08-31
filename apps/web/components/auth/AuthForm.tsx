@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { LoaderCircle, LogIn } from "lucide-react";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
@@ -9,10 +9,10 @@ import { toast } from "sonner";
 import {
   login,
   requestPasswordReset,
-  signInWithGoogle,
   signup,
   type AuthActionState,
 } from "@/lib/actions/auth";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -103,18 +103,50 @@ function ActionFeedback({ state }: { state: AuthActionState }) {
 }
 
 function GoogleButton() {
-  const [state, formAction] = useActionState(signInWithGoogle, initialState);
+  const [pending, setPending] = useState(false);
+
+  async function handleGoogleSignIn() {
+    setPending(true);
+
+    const supabase = createClient();
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", "/dashboard");
+    callbackUrl.searchParams.set("event", "oauth");
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: callbackUrl.toString(),
+      },
+    });
+
+    if (error) {
+      toast.error(error.message);
+      setPending(false);
+      return;
+    }
+
+    if (data.url) {
+      window.location.assign(data.url);
+    } else {
+      toast.error("Google sign-in could not be started.");
+      setPending(false);
+    }
+  }
 
   return (
-    <form action={formAction}>
-      <FieldGroup>
-        <SubmitButton>
-          <LogIn aria-hidden="true" />
-          Continue with Google
-        </SubmitButton>
-        <ActionFeedback state={state} />
-      </FieldGroup>
-    </form>
+    <FieldGroup>
+      <Button
+        className="w-full"
+        disabled={pending}
+        onClick={handleGoogleSignIn}
+        type="button"
+      >
+        {pending && <LoaderCircle className="animate-spin" aria-hidden="true" />}
+        <LogIn aria-hidden="true" />
+        Continue with Google
+      </Button>
+    </FieldGroup>
   );
 }
 
