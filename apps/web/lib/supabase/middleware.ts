@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { oauthCallbackRedirectUrl } from "@/lib/supabase/oauth-callback-redirect";
+
 const protectedRoutes = [
   "/dashboard",
   "/import",
@@ -17,7 +19,13 @@ function matchesRoute(pathname: string, routes: string[]) {
 }
 
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const oauthRedirect = oauthCallbackRedirectUrl(request);
+
+  if (oauthRedirect) {
+    return NextResponse.redirect(oauthRedirect);
+  }
+
+  let response = NextResponse.next({ request);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -103,8 +103,11 @@ Google OAuth client ID and secret are configured in the Supabase dashboard, not 
 6. Enable **Google** (steps below).
 7. Under **Authentication → URL Configuration**:
    - Site URL: `http://localhost:3000`
-   - Redirect URLs: `http://localhost:3000/auth/callback`
-   - Add the production origin and `https://<your-domain>/auth/callback` before going live. For Vercel preview deployments, also allow `https://<project-name>-*-<team>.vercel.app/auth/callback` (or the matching wildcard your team uses).
+   - Redirect URLs must include the full callback path, not just the origin:
+     - `http://localhost:3000/auth/callback`
+     - `https://<your-domain>/auth/callback`
+   - If the callback path is missing, Supabase falls back to the Site URL and Google sign-in will land on `/?code=...` without creating a session.
+   - For Vercel preview deployments, also allow `https://<project-name>-*-<team>.vercel.app/auth/callback` (or the matching wildcard your team uses).
 
 The schema creates owner-scoped RLS policies and a private `pgns` Storage bucket. Store uploads beneath a user-owned path such as `<auth-user-id>/<file-name>.pgn`.
 
