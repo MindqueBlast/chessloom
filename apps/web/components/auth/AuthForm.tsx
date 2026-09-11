@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { Suspense, useActionState, useEffect, useState } from "react";
 import { LoaderCircle, LogIn } from "lucide-react";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
@@ -156,7 +156,7 @@ function GoogleButton() {
   );
 }
 
-export function AuthForm({ mode }: { mode: AuthMode }) {
+function AuthFormInner({ mode }: { mode: AuthMode }) {
   const copy = content[mode];
   const [state, formAction] = useActionState(actions[mode], initialState);
   const hasPassword = mode !== "forgot-password";
@@ -237,5 +237,13 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         </Button>
       </CardFooter>
     </Card>
+  );
+}
+
+export function AuthForm({ mode }: { mode: AuthMode }) {
+  return (
+    <Suspense fallback={null}>
+      <AuthFormInner mode={mode} />
+    </Suspense>
   );
 }
