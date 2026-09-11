@@ -156,7 +156,7 @@ export async function signOut() {
   redirect("/login?auth=signed-out");
 }
 
-export async function deleteAccountAction(): Promise<AuthActionState> {
+export async function deleteAccountAction() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -164,7 +164,7 @@ export async function deleteAccountAction(): Promise<AuthActionState> {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return { error: "Sign in before deleting your account." };
+    redirect("/login?auth=callback-error");
   }
 
   const { createServiceClient } = await import("@/lib/supabase/service");
@@ -172,7 +172,7 @@ export async function deleteAccountAction(): Promise<AuthActionState> {
   const { error } = await admin.auth.admin.deleteUser(user.id);
 
   if (error) {
-    return { error: error.message };
+    redirect("/settings?delete=error");
   }
 
   await supabase.auth.signOut();
