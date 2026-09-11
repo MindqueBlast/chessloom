@@ -1,6 +1,6 @@
 # Chessloom
 
-Chess opening trainer. Import a PGN repertoire, then Learn and Practice it with server-authoritative scoring.
+Chess opening trainer. Import a PGN repertoire (or pick a curated Lichess starter opening), then Learn and Practice it with server-authoritative scoring.
 
 This is a [pnpm](https://pnpm.io/) workspace:
 
@@ -145,5 +145,8 @@ You can also import the repo with Root Directory left at the repository root and
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only; do not give this a `NEXT_PUBLIC_` name)
 - `NEXT_PUBLIC_SITE_URL` (the Vercel production URL or custom domain)
+- Optional: `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_SENTRY_DSN`, `RESEND_API_KEY`, `CRON_SECRET` (see `apps/web/.env.local.example`)
 
 After the first production URL exists, add that origin and `/auth/callback` to the Supabase redirect allowlist and to the Google OAuth client's authorized origins.
+
+Apply the latest SQL migrations (including `email_reminders_enabled` on `profiles`). Growth operating cadence: [`docs/GROWTH.md`](docs/GROWTH.md).

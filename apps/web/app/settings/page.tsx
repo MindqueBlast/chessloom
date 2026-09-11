@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { signOut } from "@/lib/actions/auth";
+import { deleteAccountAction, signOut } from "@/lib/actions/auth";
 import { AppHeader } from "@/components/app/AppHeader";
 import { PageTransition } from "@/components/motion/PageTransition";
 import { SettingsForm } from "@/components/settings/SettingsForm";
@@ -31,7 +32,7 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("default_side_mode")
+    .select("default_side_mode, display_name, email_reminders_enabled")
     .maybeSingle();
 
   return (
@@ -45,7 +46,7 @@ export default async function SettingsPage() {
             </p>
             <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
             <p className="text-sm text-muted-foreground">
-              Theme, training defaults, and session.
+              Theme, training defaults, reminders, and session.
             </p>
           </div>
 
@@ -61,6 +62,10 @@ export default async function SettingsPage() {
               <CardContent>
                 <SettingsForm
                   defaultSideMode={profileSideMode(profile?.default_side_mode)}
+                  displayName={profile?.display_name ?? ""}
+                  emailRemindersEnabled={
+                    profile?.email_reminders_enabled !== false
+                  }
                 />
               </CardContent>
             </Card>
@@ -69,17 +74,47 @@ export default async function SettingsPage() {
               <CardHeader>
                 <CardTitle>Account</CardTitle>
                 <CardDescription>
-                  Manage your current Chessloom session.
+                  Manage your Chessloom session or permanently delete your
+                  account.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-wrap gap-3">
                 <form action={signOut}>
                   <Button type="submit" variant="outline">
                     Sign out
                   </Button>
                 </form>
+                <form action={deleteAccountAction}>
+                  <Button type="submit" variant="destructive">
+                    Delete account
+                  </Button>
+                </form>
               </CardContent>
             </Card>
+
+            <p className="text-xs text-muted-foreground">
+              Need help?{" "}
+              <Link className="underline underline-offset-4" href="/docs">
+                Learn vs Practice vs Test
+              </Link>
+              {" · "}
+              <a
+                className="underline underline-offset-4"
+                href="https://github.com/MindqueBlast/chessloom/issues"
+                rel="noreferrer"
+                target="_blank"
+              >
+                Feedback on GitHub
+              </a>
+              {" · "}
+              <Link className="underline underline-offset-4" href="/privacy">
+                Privacy
+              </Link>
+              {" · "}
+              <Link className="underline underline-offset-4" href="/terms">
+                Terms
+              </Link>
+            </p>
           </div>
         </section>
       </PageTransition>

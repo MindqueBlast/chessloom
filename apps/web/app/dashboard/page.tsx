@@ -1,18 +1,17 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BookOpen, CalendarClock, FileUp, Flame, Target } from "lucide-react";
 import { formatPathSan } from "@chessloom/chess-core";
-import {
-  BookOpen,
-  CalendarClock,
-  FileUp,
-  Flame,
-  Target,
-} from "lucide-react";
 
 import { AppHeader } from "@/components/app/AppHeader";
+import { FirstRunChecklist } from "@/components/onboarding/FirstRunChecklist";
+import { StarterOpeningPicker } from "@/components/openings/StarterOpeningPicker";
 import { PageTransition } from "@/components/motion/PageTransition";
 import { StaggerItem } from "@/components/motion/StaggerItem";
 import { StudyCard } from "@/components/studies/StudyCard";
+import { ShareProgressCard } from "@/components/growth/ShareProgressCard";
+import { ReturnTracker } from "@/components/analytics/ReturnTracker";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -95,20 +94,25 @@ export default async function DashboardPage() {
     (nodesResult.data ?? []) as DashboardNode[],
     (progressResult.data ?? []) as DashboardProgress[],
   );
+  const completedSessions = sessionsResult.data ?? [];
   const streak = calculateTrainingStreak(
-    (sessionsResult.data ?? []).map((session) => session.updated_at),
+    completedSessions.map((session) => session.updated_at),
   );
-  const practiceStudy = summary.studies.reduce<(typeof summary.studies)[number] | null>(
+  const practiceStudy = summary.studies.reduce<
+    (typeof summary.studies)[number] | null
+  >(
     (best, study) =>
       study.dueCount > 0 && (!best || study.dueCount > best.dueCount)
         ? study
         : best,
     null,
   );
+  const firstStudyId = summary.studies[0]?.id ?? null;
 
   return (
     <main className="min-h-svh bg-background">
       <AppHeader />
+      <ReturnTracker />
       <PageTransition>
         <section className="mx-auto w-full max-w-6xl px-6 py-12 lg:px-8">
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -135,11 +139,27 @@ export default async function DashboardPage() {
               <Button asChild size="lg" variant="outline">
                 <Link href="/import">
                   <FileUp />
-                  Import PGN
+                  Import study
                 </Link>
               </Button>
             </div>
           </div>
+
+          <FirstRunChecklist
+            hasStudies={summary.studies.length > 0}
+            hasCompletedSession={completedSessions.length > 0}
+            firstStudyId={firstStudyId}
+          />
+
+          {summary.studies.length > 0 ? (
+            <ShareProgressCard
+              className="mb-8"
+              dueCount={summary.dueCount}
+              streak={streak}
+              studyCount={summary.studies.length}
+              weakCount={summary.weakPositions.length}
+            />
+          ) : null}
 
           <div className="mb-10 grid gap-4 md:grid-cols-3">
             <StaggerItem index={0}>
@@ -219,22 +239,28 @@ export default async function DashboardPage() {
               ))}
             </div>
           ) : (
-            <Empty className="min-h-72 border">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <BookOpen />
-                </EmptyMedia>
-                <EmptyTitle>No studies yet</EmptyTitle>
-                <EmptyDescription>
-                  Import a PGN to preserve its games and variations as a study.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button asChild>
-                  <Link href="/import">Import your first PGN</Link>
-                </Button>
-              </EmptyContent>
-            </Empty>
+            <div className="space-y-10">
+              <Empty className="min-h-56 border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <BookOpen />
+                  </EmptyMedia>
+                  <EmptyTitle>No studies yet</EmptyTitle>
+                  <EmptyDescription>
+                    Pick a curated opening below, or import your own Lichess
+                    study / PGN.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button asChild variant="outline">
+                    <Link href="/import">Import your own study</Link>
+                  </Button>
+                </EmptyContent>
+              </Empty>
+              <Suspense fallback={null}>
+                <StarterOpeningPicker />
+              </Suspense>
+            </div>
           )}
         </section>
       </PageTransition>

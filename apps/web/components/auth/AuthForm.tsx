@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { LoaderCircle, LogIn } from "lucide-react";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -104,13 +105,18 @@ function ActionFeedback({ state }: { state: AuthActionState }) {
 
 function GoogleButton() {
   const [pending, setPending] = useState(false);
+  const searchParams = useSearchParams();
+  const starter = searchParams.get("starter");
 
   async function handleGoogleSignIn() {
     setPending(true);
 
     const supabase = createClient();
     const callbackUrl = new URL("/auth/callback", window.location.origin);
-    callbackUrl.searchParams.set("next", "/dashboard");
+    const next = starter
+      ? `/dashboard?starter=${encodeURIComponent(starter)}`
+      : "/dashboard";
+    callbackUrl.searchParams.set("next", next);
     callbackUrl.searchParams.set("event", "oauth");
 
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -154,6 +160,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const copy = content[mode];
   const [state, formAction] = useActionState(actions[mode], initialState);
   const hasPassword = mode !== "forgot-password";
+  const searchParams = useSearchParams();
+  const starter = searchParams.get("starter");
 
   return (
     <Card className="w-full max-w-md">
@@ -163,6 +171,9 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <form action={formAction}>
+          {starter ? (
+            <input type="hidden" name="starter" value={starter} />
+          ) : null}
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`${mode}-email`}>Email</FieldLabel>

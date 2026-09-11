@@ -53,3 +53,79 @@ export async function updateDefaultSideModeAction(
   revalidatePath("/dashboard");
   return { ok: true };
 }
+
+export async function updateDisplayNameAction(
+  value: unknown,
+): Promise<SettingsActionResult> {
+  if (typeof value !== "string") {
+    return { ok: false, error: "Enter a display name." };
+  }
+
+  const displayName = value.trim();
+  if (displayName.length < 1 || displayName.length > 48) {
+    return {
+      ok: false,
+      error: "Use a display name between 1 and 48 characters.",
+    };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { ok: false, error: "Sign in before updating settings." };
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ display_name: displayName })
+    .eq("id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  if (!data) {
+    return { ok: false, error: "Your profile could not be updated." };
+  }
+
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function updateEmailRemindersAction(
+  enabled: boolean,
+): Promise<SettingsActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { ok: false, error: "Sign in before updating settings." };
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ email_reminders_enabled: enabled })
+    .eq("id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  if (!data) {
+    return { ok: false, error: "Your profile could not be updated." };
+  }
+
+  revalidatePath("/settings");
+  return { ok: true };
+}

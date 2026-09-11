@@ -74,11 +74,20 @@ export async function signup(
     return { error: invalidCredentialsMessage };
   }
 
+  const starterField = formData.get("starter");
+  const starter =
+    typeof starterField === "string" && starterField.trim()
+      ? starterField.trim()
+      : null;
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     ...credentials,
     options: {
-      emailRedirectTo: await callbackUrl("/dashboard", "confirmed"),
+      emailRedirectTo: await callbackUrl(
+        starter ? `/dashboard?starter=${encodeURIComponent(starter)}` : "/dashboard",
+        "confirmed",
+      ),
     },
   });
 
@@ -87,7 +96,9 @@ export async function signup(
   }
 
   if (data.session) {
-    redirect("/dashboard?auth=signup");
+    const params = new URLSearchParams({ auth: "signup" });
+    if (starter) params.set("starter", starter);
+    redirect(`/dashboard?${params.toString()}`);
   }
 
   return {
@@ -141,6 +152,52 @@ export async function updatePassword(
 
 export async function signOut() {
   const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login?auth=signed-out");
+}
+
+export async function deleteAccountAction(): Promise<AuthActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "Sign in before deleting your account." };
+  }
+
+  const { createServiceClient } = await import("@/lib/supabase/service");
+  const admin = createServiceClient();
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  await supabase.auth.signOut();
+  redirect("/?deleted=1");
+}
+
+export async function deleteAccountAction(): Promise<AuthActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "Sign in before deleting your account." };
+  }
+
+  const { createServiceClient } = await import("@/lib/supabase/service");
+  const service = createServiceClient();
+  const { error } = await service.auth.admin.deleteUser(user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
   await supabase.auth.signOut();
   redirect("/login?auth=signed-out");
 }
