@@ -178,26 +178,3 @@ export async function deleteAccountAction(): Promise<AuthActionState> {
   await supabase.auth.signOut();
   redirect("/?deleted=1");
 }
-
-export async function deleteAccountAction(): Promise<AuthActionState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: "Sign in before deleting your account." };
-  }
-
-  const { createServiceClient } = await import("@/lib/supabase/service");
-  const service = createServiceClient();
-  const { error } = await service.auth.admin.deleteUser(user.id);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  await supabase.auth.signOut();
-  redirect("/login?auth=signed-out");
-}
