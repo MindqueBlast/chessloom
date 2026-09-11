@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+import { trackEvent } from "@/lib/analytics/track";
 import { toastCopy } from "@/lib/toasts";
 
 const messages: Record<string, { kind: "error" | "success"; text: string }> = {
@@ -23,6 +24,8 @@ const messages: Record<string, { kind: "error" | "success"; text: string }> = {
   },
 };
 
+const signupEvents = new Set(["signup", "confirmed", "oauth"]);
+
 export function AuthEventToaster() {
   const pathname = usePathname();
   const router = useRouter();
@@ -36,6 +39,10 @@ export function AuthEventToaster() {
 
     const message = messages[event];
     toast[message.kind](message.text);
+
+    if (signupEvents.has(event)) {
+      trackEvent("signup_completed", { method: event });
+    }
 
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("auth");

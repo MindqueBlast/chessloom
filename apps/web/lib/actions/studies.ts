@@ -4,6 +4,7 @@ import { parsePgnToStudy } from "@chessloom/chess-core";
 import { revalidatePath } from "next/cache";
 
 import { fetchLichessStudyPgn } from "@/lib/lichess/fetch-study";
+import { getStarterOpening } from "@/lib/openings/starter-catalog";
 import { createClient } from "@/lib/supabase/server";
 import { flattenStudyTree, importSource } from "@/lib/studies/import";
 import { toastCopy } from "../toasts";
@@ -172,6 +173,17 @@ async function importLichessStudy(
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
+}
+
+export async function importStarterOpeningAction(
+  starterId: string,
+): Promise<StudyActionResult> {
+  const starter = getStarterOpening(starterId);
+  if (!starter) {
+    return { ok: false, error: "That starter opening is not available." };
+  }
+
+  return importLichessStudy(starter.lichessStudyUrl, starter.title);
 }
 
 export async function importPgnFormAction(

@@ -15,9 +15,35 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://chessloom.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Chessloom",
-  description: "Build, understand, and retain your chess repertoire.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Chessloom — Opening repertoire trainer",
+    template: "%s | Chessloom",
+  },
+  description:
+    "Free open-source chess opening trainer. Pick a beginner Lichess study or import your repertoire, then Learn, Practice, and review with FSRS.",
+  openGraph: {
+    title: "Chessloom — Opening repertoire trainer",
+    description:
+      "Quiz your openings — curated starters for beginners, or import your own Lichess/PGN repertoire.",
+    url: siteUrl,
+    siteName: "Chessloom",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Chessloom — Opening repertoire trainer",
+    description:
+      "Free OSS opening trainer with Learn, Practice, Test, and spaced review.",
+  },
+  alternates: {
+    canonical: siteUrl,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

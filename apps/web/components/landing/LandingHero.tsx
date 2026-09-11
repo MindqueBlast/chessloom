@@ -60,8 +60,8 @@ export function LandingHero() {
           transition={enter(0.1)}
         >
           <Button asChild size="lg">
-            <Link href="/signup">
-              Start building
+            <Link href="/signup?starter=italian-beginner">
+              Try the Italian in one click
               <ArrowRight data-icon="inline-end" />
             </Link>
           </Button>

@@ -6,7 +6,11 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import { usePalette } from "@/components/providers/PaletteProvider";
-import { updateDefaultSideModeAction } from "@/lib/actions/settings";
+import {
+  updateDefaultSideModeAction,
+  updateDisplayNameAction,
+  updateEmailRemindersAction,
+} from "@/lib/actions/settings";
 import {
   LEARN_AUTO_CONTINUE_KEY,
   PALETTE_OPTIONS,
@@ -25,6 +29,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 const themeOptions: Array<{
   value: ThemePreference;
@@ -61,8 +66,12 @@ function writeLocalFlag(key: string, value: boolean) {
 
 export function SettingsForm({
   defaultSideMode,
+  displayName,
+  emailRemindersEnabled,
 }: {
   defaultSideMode: DefaultSideMode;
+  displayName: string;
+  emailRemindersEnabled: boolean;
 }) {
   const { theme, setTheme } = useTheme();
   const { palette, setPalette } = usePalette();
@@ -72,6 +81,8 @@ export function SettingsForm({
     () => false,
   );
   const [sideMode, setSideMode] = useState(defaultSideMode);
+  const [name, setName] = useState(displayName);
+  const [reminders, setReminders] = useState(emailRemindersEnabled);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [learnAutoContinue, setLearnAutoContinue] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -120,8 +131,57 @@ export function SettingsForm({
     });
   }
 
+  function saveDisplayName() {
+    const previous = name;
+    startTransition(async () => {
+      const result = await updateDisplayNameAction(name);
+      if (result.ok) {
+        toast.success(toastCopy.settingsSaved);
+        return;
+      }
+      setName(previous);
+      toast.error(result.error);
+    });
+  }
+
+  function saveReminders(value: boolean) {
+    const previous = reminders;
+    setReminders(value);
+    startTransition(async () => {
+      const result = await updateEmailRemindersAction(value);
+      if (result.ok) {
+        toast.success(toastCopy.settingsSaved);
+        return;
+      }
+      setReminders(previous);
+      toast.error(result.error);
+    });
+  }
+
   return (
     <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+        <FieldDescription>Shown on your account profile.</FieldDescription>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            id="display-name"
+            value={name}
+            maxLength={48}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Your name"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={saveDisplayName}
+          >
+            Save name
+          </Button>
+        </div>
+      </Field>
+
       <Field>
         <FieldLabel>Appearance</FieldLabel>
         <FieldDescription>
@@ -195,6 +255,34 @@ export function SettingsForm({
               {option.label}
             </Button>
           ))}
+        </div>
+      </Field>
+
+      <Field>
+        <FieldLabel>Due reminders</FieldLabel>
+        <FieldDescription>
+          Occasional email when you have positions due (up to twice a week).
+          Requires Resend on the server.
+        </FieldDescription>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={reminders ? "default" : "outline"}
+            aria-pressed={reminders}
+            disabled={pending}
+            onClick={() => saveReminders(true)}
+          >
+            On
+          </Button>
+          <Button
+            type="button"
+            variant={!reminders ? "default" : "outline"}
+            aria-pressed={!reminders}
+            disabled={pending}
+            onClick={() => saveReminders(false)}
+          >
+            Off
+          </Button>
         </div>
       </Field>
 

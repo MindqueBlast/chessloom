@@ -14,6 +14,7 @@ import {
   importPgnFormAction,
   type StudyActionResult,
 } from "@/lib/actions/studies";
+import { trackEvent } from "@/lib/analytics/track";
 import { motionTokens } from "@/lib/motion/tokens";
 import { useSound } from "@/lib/sound/useSound";
 import { toastCopy } from "@/lib/toasts";
@@ -36,6 +37,7 @@ export function ImportForm() {
 
     if (state.ok) {
       play("importSuccess");
+      trackEvent("import_succeeded", { source: "manual" });
       toast.success(toastCopy.studyImported);
       router.push(`/studies/${state.studyId}`);
       return;
@@ -47,20 +49,7 @@ export function ImportForm() {
   return (
     <form action={formAction} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="title">Study title</Label>
-        <Input
-          id="title"
-          name="title"
-          placeholder="Use the PGN event name"
-          maxLength={120}
-        />
-        <p className="text-xs text-muted-foreground">
-          Leave blank to use the first game&apos;s Event header.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="lichessUrl">Lichess study URL</Label>
+        <Label htmlFor="lichessUrl">Lichess study URL (recommended)</Label>
         <Input
           id="lichessUrl"
           name="lichessUrl"
@@ -70,9 +59,20 @@ export function ImportForm() {
           autoComplete="url"
         />
         <p className="text-xs text-muted-foreground">
-          Paste a public Lichess study link to import it directly. When set,
-          PGN paste and file upload are ignored.
+          Paste a <strong>public</strong> Lichess study link. Private studies
+          cannot be imported yet. When this field is set, PGN paste and file
+          upload are ignored.
         </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="title">Study title (optional)</Label>
+        <Input
+          id="title"
+          name="title"
+          placeholder="Use the study or PGN event name"
+          maxLength={120}
+        />
       </div>
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -87,7 +87,7 @@ export function ImportForm() {
           id="pgnText"
           name="pgnText"
           placeholder={'[Event "My repertoire"]\n\n1. e4 e5 2. Nf3 *'}
-          className="min-h-64 font-mono"
+          className="min-h-48 font-mono"
         />
       </div>
 
@@ -106,7 +106,8 @@ export function ImportForm() {
           accept=".pgn,application/x-chess-pgn,text/plain"
         />
         <p className="text-xs text-muted-foreground">
-          Uploaded files take precedence over pasted text.
+          Uploaded files take precedence over pasted text when no Lichess URL is
+          set.
         </p>
       </div>
 

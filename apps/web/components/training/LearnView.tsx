@@ -37,6 +37,8 @@ import { SESSION_SIDE_MODES, trainingPath } from "@/lib/training/start";
 import { toastCopy } from "@/lib/toasts";
 
 import { FeedbackBanner, type FeedbackKind } from "./FeedbackBanner";
+import { markOnboardingLearnedFiveMoves } from "@/components/onboarding/FirstRunChecklist";
+import { trackEvent } from "@/lib/analytics/track";
 
 function findNode(node: TreeNode, pathKey: string): TreeNode | null {
   if (node.pathKey === pathKey) return node;
@@ -76,6 +78,7 @@ export function LearnView({
   const announcedComplete = useRef(initialCheckpoint.status === "complete");
   const opponentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoContinueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const correctMovesRef = useRef(0);
 
   const chapter = chapters.find(
     (candidate) => candidate.index === checkpoint.chapterIndex,
@@ -192,6 +195,13 @@ export function LearnView({
           setPendingCheckpoint(next);
           play("correct");
           setFeedback({ kind: "correct", animate });
+          correctMovesRef.current += 1;
+          if (correctMovesRef.current === 1) {
+            trackEvent("first_train_started", { mode: "learn" });
+          }
+          if (correctMovesRef.current >= 5) {
+            markOnboardingLearnedFiveMoves();
+          }
 
           const resolvedChapter = chapters.find(
             (candidate) => candidate.index === next.chapterIndex,
@@ -249,6 +259,7 @@ export function LearnView({
     }
     announcedComplete.current = true;
     toast.success(toastCopy.sessionCompleted);
+    trackEvent("session_completed", { mode: "learn" });
   }, [checkpoint.status, pendingCheckpoint]);
 
   useEffect(() => {

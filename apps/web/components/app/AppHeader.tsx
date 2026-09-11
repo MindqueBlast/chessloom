@@ -19,7 +19,7 @@ function NavLinks({ className }: { className?: string }) {
   return (
     <div className={className}>
       <Button asChild variant="ghost">
-        <Link href="/import">Import PGN</Link>
+        <Link href="/import">Import</Link>
       </Button>
       <Button asChild variant="ghost">
         <Link href="/settings">Settings</Link>
@@ -67,7 +67,7 @@ export function AppHeader() {
             <nav className="mt-6 flex flex-col gap-2" aria-label="Account">
               <SheetClose asChild>
                 <Button asChild variant="ghost" className="justify-start">
-                  <Link href="/import">Import PGN</Link>
+                  <Link href="/import">Import</Link>
                 </Button>
               </SheetClose>
               <SheetClose asChild>

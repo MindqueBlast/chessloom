@@ -1,5 +1,11 @@
 {
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm --filter @chessloom/chess-core build && pnpm --filter @chessloom/web build",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/due-reminders",
+      "schedule": "0 14 * * 1,4"
+    }
+  ]
 }

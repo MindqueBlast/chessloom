@@ -42,12 +42,36 @@ export default function Home() {
           >
             Why Chessloom?
           </a>
-          <a
-            href="/signup"
+          <Link
+            href="/docs"
+            className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Help
+          </Link>
+          <Link
+            href="/changelog"
+            className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Changelog
+          </Link>
+          <Link
+            href="/privacy"
+            className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/terms"
+            className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Terms
+          </Link>
+          <Link
+            href="/signup?starter=italian-beginner"
             className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
           >
             Create an account
-          </a>
+          </Link>
         </div>
       </footer>
     </main>
